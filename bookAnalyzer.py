@@ -3,6 +3,7 @@ import io
 import sys
 import argparse
 import json
+import math
 from pathlib import Path
 import sqlite3
 from typing import List, Tuple
@@ -11,6 +12,23 @@ from PIL import Image
 from pdf2image import convert_from_path
 from jinja2 import Environment, FileSystemLoader
 import base64
+
+def pretty_size(size_bytes: int) -> str:
+    """
+    Конвертирует размер файла в формат, понятный человеку.\n
+    Аргументы:
+    size_bytes -- размер файла в байтах\n
+    Возвращает:
+    Строку, содержащую размер файла в формате, понятном человеку.
+    Например: "10.5 МБ", "678 КБ", "5 ГБ" и т.д.
+    """
+    units = ['байт', 'КБ', 'МБ', 'ГБ', 'ТБ', 'ПБ']
+    if size_bytes < 1024:
+        return f"{size_bytes:.0f} {units[0]}"
+    exp = int(math.log(size_bytes, 1024))
+    size = size_bytes / 1024 ** exp
+    size_str = f"{size:.1f}"
+    return f"{size_str} {units[exp]}"
 
 class BookAnalyzer:
     def __init__(self, db_path: str):
@@ -59,13 +77,26 @@ class BookAnalyzer:
                 metadata = reader.metadata
                 num_pages = len(reader.pages)
 
+                print(metadata)
+
+                # Извлечение данных о названии и авторе
+                title = metadata.get('/Title')
+                author = metadata.get('/Author')
+
+                # Если в метаданных нет названия, используем имя файла без расширения
+                if not title:
+                    title = os.path.splitext(os.path.basename(file_path))[0]
+
+                # Извлечение размера файла
+                file_size = pretty_size(os.path.getsize(file_path))
+
                 # Подготавливаем данные для вставки
-                data = (file_path, str(metadata), num_pages)
+                data = (file_path, title, author, file_size, str(metadata), num_pages)
 
                 # Выполняем запрос к базе данных
                 cursor.execute("""
-                    INSERT OR REPLACE INTO books (file_path, metadata, num_pages)
-                    VALUES (?, ?, ?)
+                    INSERT OR REPLACE INTO books (file_path, title, author, file_size, metadata, num_pages)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 """, data)
         except Exception as e:
             print(f"Failed to process file {file_path}. Reason: {e}")
