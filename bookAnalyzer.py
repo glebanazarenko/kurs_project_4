@@ -4,8 +4,10 @@ import sys
 import argparse
 import json
 import math
+import fitz
 from pathlib import Path
 import sqlite3
+import matplotlib.pyplot as plt
 from typing import List, Tuple
 from PyPDF2 import PdfReader
 from PIL import Image
@@ -43,9 +45,10 @@ class BookAnalyzer:
         # Создаем курсор для выполнения SQL-запросов
         cursor = conn.cursor()
 
-        cursor.execute('''
-            DROP TABLE IF EXISTS books
-        ''')
+        #удаление таблицы в бд
+        #cursor.execute('''
+        #    DROP TABLE IF EXISTS books
+        #''')
 
         # Создаем таблицу, если она не существует
         cursor.execute('''
@@ -76,8 +79,12 @@ class BookAnalyzer:
                 reader = PdfReader(file)
                 metadata = reader.metadata
                 num_pages = len(reader.pages)
+                preview = self.__get_preview(file_path)
+                #preview2 = self.__convert_to_binary_data(file_path)
 
                 print(metadata)
+                #print(preview)
+                #print(preview2)
 
                 # Извлечение данных о названии и авторе
                 title = metadata.get('/Title')
@@ -90,20 +97,89 @@ class BookAnalyzer:
                 # Извлечение размера файла
                 file_size = pretty_size(os.path.getsize(file_path))
 
-                # Подготавливаем данные для вставки
-                data = (file_path, title, author, file_size, str(metadata), num_pages)
+                # Проверяем, есть ли уже книга в БД
+                cursor.execute('SELECT * FROM books WHERE file_path = ?', (file_path,))
+                row = cursor.fetchone()
 
-                # Выполняем запрос к базе данных
-                cursor.execute("""
-                    INSERT OR REPLACE INTO books (file_path, title, author, file_size, metadata, num_pages)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, data)
+                if row is None:
+                    # Если книги нет в БД, добавляем ее
+                    # Выполняем запрос к базе данных
+
+                    # Подготавливаем данные для вставки
+                    data = (file_path, title, author, file_size, str(metadata), num_pages, preview)
+
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO books (file_path, title, author, file_size, metadata, num_pages, preview)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, data)
+                else:
+                    # Если книга уже есть в БД, обновляем ее
+
+                    # Подготавливаем данные для вставки
+                    data = (title, author, file_size, str(metadata), num_pages, preview, file_path)
+
+                    cursor.execute('''
+                        UPDATE books SET title = ?, author = ?, file_size = ?, metadata = ?, num_pages = ?, preview = ?
+                        WHERE file_path = ?
+                    ''', data)
         except Exception as e:
             print(f"Failed to process file {file_path}. Reason: {e}")
         
         # Сохраняем изменения и закрываем соединение
         conn.commit()
         conn.close()
+
+    def __get_preview(self, book_path: str) -> bytes:
+        # Возвращает изображение превью (скриншот 1-й страницы) книги в виде байтов
+        doc = fitz.open(book_path)
+        page = doc[0]  # Возьмем первую страницу
+
+        # Рендерим страницу в изображение
+        pix = page.get_pixmap()
+        image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+        # Конвертируем PIL Image в bytes
+        byte_arr = io.BytesIO()
+        image.save(byte_arr, format='PNG')
+        return byte_arr.getvalue()
+
+    
+    def __convert_to_binary_data(self, book_path: str) -> bytes:
+        # Преобразование данных в двоичный формат
+        with open(book_path, 'rb') as file:
+            blob_data = file.read()
+        return blob_data
+    
+    def __get_all_previews(self):
+        # Создаем соединение с БД
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # Получаем все превью из БД
+        cursor.execute('SELECT title, preview FROM books')
+        previews = cursor.fetchall()
+
+        # Закрываем соединение
+        conn.close()
+
+        # Возвращаем список кортежей вида (название книги, превью)
+        return previews
+    
+    def display_previews(self):
+        # Получаем все превью
+        previews = self.__get_all_previews()
+
+        # Выводим превью каждой книги
+        for title, preview in previews:
+            # Конвертируем bytes в PIL Image
+            image = Image.open(io.BytesIO(preview))
+
+            # Выводим изображение
+            plt.figure()
+            plt.imshow(image)
+            plt.title(title)
+            plt.axis('off')
+            plt.show()
     
     def process_directory(self, directory, file_types, exclude, max_depth, current_depth=0):
         # Обработка каталога (рекурсивно), обновление информации о книгах в БД
