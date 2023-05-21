@@ -5,6 +5,9 @@ import argparse
 import json
 import math
 import fitz
+import ebooklib #для работы с ePub-файлами
+from ebooklib import epub
+from bs4 import BeautifulSoup #для обработки HTML-кода в ePub-файлах
 from pathlib import Path
 import sqlite3
 import matplotlib.pyplot as plt
@@ -46,9 +49,9 @@ class BookAnalyzer:
         cursor = conn.cursor()
 
         #удаление таблицы в бд
-        #cursor.execute('''
-        #    DROP TABLE IF EXISTS books
-        #''')
+        cursor.execute('''
+            DROP TABLE IF EXISTS books
+        ''')
 
         # Создаем таблицу, если она не существует
         cursor.execute('''
@@ -74,54 +77,65 @@ class BookAnalyzer:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        try:
-            with open(file_path, 'rb') as file:
-                reader = PdfReader(file)
-                metadata = reader.metadata
-                num_pages = len(reader.pages)
-                preview = self.__get_preview(file_path)
-                #preview2 = self.__convert_to_binary_data(file_path)
+        file_ext = os.path.splitext(file_path)[1].lower()
 
-                print(metadata)
-                #print(preview)
-                #print(preview2)
+        try:
+            if file_ext == '.pdf':
+                with open(file_path, 'rb') as file:
+                    reader = PdfReader(file)
+                    metadata = reader.metadata
+                    num_pages = len(reader.pages)
+                    preview = self.__get_preview(file_path)
+
+                    # Извлечение данных о названии и авторе
+                    title = metadata.get('/Title')
+                    author = metadata.get('/Author')
+
+            elif file_ext == '.epub':
+                book = epub.read_epub(file_path)
+                metadata = book.metadata
+                num_pages = self.__count_generator_items(book.get_items_of_type(ebooklib.ITEM_DOCUMENT))
+                preview = self.__get_epub_cover(book)
 
                 # Извлечение данных о названии и авторе
-                title = metadata.get('/Title')
-                author = metadata.get('/Author')
+                dc_metadata = metadata.get('http://purl.org/dc/elements/1.1/')
+                title = dc_metadata['title'][0][0] if dc_metadata and 'title' in dc_metadata else None
+                author = dc_metadata['creator'][0][0] if dc_metadata and 'creator' in dc_metadata else None
 
-                # Если в метаданных нет названия, используем имя файла без расширения
-                if not title:
-                    title = os.path.splitext(os.path.basename(file_path))[0]
+            print(metadata)
 
-                # Извлечение размера файла
-                file_size = pretty_size(os.path.getsize(file_path))
+            # Если в метаданных нет названия, используем имя файла без расширения
+            if not title:
+                title = os.path.splitext(os.path.basename(file_path))[0]
 
-                # Проверяем, есть ли уже книга в БД
-                cursor.execute('SELECT * FROM books WHERE file_path = ?', (file_path,))
-                row = cursor.fetchone()
+            # Извлечение размера файла
+            file_size = pretty_size(os.path.getsize(file_path))
 
-                if row is None:
-                    # Если книги нет в БД, добавляем ее
-                    # Выполняем запрос к базе данных
+            # Проверяем, есть ли уже книга в БД
+            cursor.execute('SELECT * FROM books WHERE file_path = ?', (file_path,))
+            row = cursor.fetchone()
 
-                    # Подготавливаем данные для вставки
-                    data = (file_path, title, author, file_size, str(metadata), num_pages, preview)
+            if row is None:
+                # Если книги нет в БД, добавляем ее
+                # Выполняем запрос к базе данных
 
-                    cursor.execute("""
-                        INSERT OR REPLACE INTO books (file_path, title, author, file_size, metadata, num_pages, preview)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                # Подготавливаем данные для вставки
+                data = (file_path, title, author, file_size, str(metadata), num_pages, preview)
+
+                cursor.execute("""
+                    INSERT OR REPLACE INTO books (file_path, title, author, file_size, metadata, num_pages, preview)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, data)
-                else:
-                    # Если книга уже есть в БД, обновляем ее
+            else:
+                # Если книга уже есть в БД, обновляем ее
 
-                    # Подготавливаем данные для вставки
-                    data = (title, author, file_size, str(metadata), num_pages, preview, file_path)
+                # Подготавливаем данные для вставки
+                data = (title, author, file_size, str(metadata), num_pages, preview, file_path)
 
-                    cursor.execute('''
-                        UPDATE books SET title = ?, author = ?, file_size = ?, metadata = ?, num_pages = ?, preview = ?
-                        WHERE file_path = ?
-                    ''', data)
+                cursor.execute('''
+                    UPDATE books SET title = ?, author = ?, file_size = ?, metadata = ?, num_pages = ?, preview = ?
+                    WHERE file_path = ?
+                ''', data)
         except Exception as e:
             print(f"Failed to process file {file_path}. Reason: {e}")
         
@@ -142,13 +156,37 @@ class BookAnalyzer:
         byte_arr = io.BytesIO()
         image.save(byte_arr, format='PNG')
         return byte_arr.getvalue()
-
     
-    def __convert_to_binary_data(self, book_path: str) -> bytes:
-        # Преобразование данных в двоичный формат
-        with open(book_path, 'rb') as file:
-            blob_data = file.read()
-        return blob_data
+    def __get_epub_cover(self, book: ebooklib.epub.EpubBook) -> bytes:
+        # Попытка извлечь обложку
+        cover_item_id = None
+        cover_metadata = book.get_metadata('OPF', 'cover')
+
+        if cover_metadata:
+            cover_item_id = cover_metadata[0][0]
+
+        cover_item = book.get_item_with_id(cover_item_id) if cover_item_id else None
+
+        # Если обложка не найдена, ищем первое изображение в книге
+        if cover_item is None:
+            for item in book.get_items_of_type(ebooklib.ITEM_IMAGE):
+                cover_item = item
+                break
+
+        # Если изображение так и не найдено, возвращаем None
+        if cover_item is None:
+            return None
+
+        # Преобразование обложки в байты
+        cover_image = Image.open(io.BytesIO(cover_item.get_content()))
+        byte_arr = io.BytesIO()
+        cover_image.save(byte_arr, format='PNG')
+        return byte_arr.getvalue()
+    
+    @staticmethod
+    def __count_generator_items(generator):
+            return sum(1 for _ in generator)
+
     
     def __get_all_previews(self):
         # Создаем соединение с БД
