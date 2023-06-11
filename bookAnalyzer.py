@@ -13,8 +13,11 @@ import sqlite3
 import matplotlib.pyplot as plt
 from typing import List, Tuple
 from PyPDF2 import PdfReader
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from pdf2image import convert_from_path
+from docx import Document
+from docx.opc.exceptions import PackageNotFoundError
+import docx2txt
 from jinja2 import Environment, FileSystemLoader
 import base64
 
@@ -101,6 +104,40 @@ class BookAnalyzer:
                 dc_metadata = metadata.get('http://purl.org/dc/elements/1.1/')
                 title = dc_metadata['title'][0][0] if dc_metadata and 'title' in dc_metadata else None
                 author = dc_metadata['creator'][0][0] if dc_metadata and 'creator' in dc_metadata else None
+            
+            elif file_ext == '.docx':
+                try:
+                    document = Document(file_path)
+                    # Заголовок файла будет использоваться как название
+                    title = document.core_properties.title or os.path.splitext(os.path.basename(file_path))[0]
+                    # Информация об авторе
+                    author = document.core_properties.author
+                    # Размер файла
+                    file_size = pretty_size(os.path.getsize(file_path))
+                    # Количество страниц в docx файлах обычно не доступно
+                    num_pages = self.__count_pages_docx(file_path)
+                    # Метаданные из core_properties
+                    metadata = {
+                        'author': document.core_properties.author,
+                        'title': document.core_properties.title,
+                        'subject': document.core_properties.subject,
+                        'keywords': document.core_properties.keywords,
+                        'last_modified_by': document.core_properties.last_modified_by,
+                        'created': document.core_properties.created,
+                        'modified': document.core_properties.modified,
+                        'category': document.core_properties.category,
+                        'comments': document.core_properties.comments,
+                        'content_status': document.core_properties.content_status,
+                        'identifier': document.core_properties.identifier,
+                        'language': document.core_properties.language,
+                        'version': document.core_properties.version,
+                        'last_printed': document.core_properties.last_printed,
+                        'revision': document.core_properties.revision,
+                    }
+                    preview = self.__get_docx_preview(file_path)
+                    # Затем производим обновление данных в БД, как и ранее
+                except PackageNotFoundError:
+                    print(f"Failed to process file {file_path}. Reason: File not found")
 
             print(metadata)
 
@@ -181,6 +218,27 @@ class BookAnalyzer:
         cover_image = Image.open(io.BytesIO(cover_item.get_content()))
         byte_arr = io.BytesIO()
         cover_image.save(byte_arr, format='PNG')
+        return byte_arr.getvalue()
+    
+    @staticmethod
+    def __count_pages_docx(docx_file_path):
+        text = docx2txt.process(docx_file_path)
+        return text.count('\f')  # '\f' является символом подачи формы, представляющим разрывы страниц
+    
+    def __get_docx_preview(self, file_path: str) -> bytes:
+        # Возвращает изображение превью (первые несколько параграфов) документа в виде байтов
+        text = docx2txt.process(file_path)
+        lines = text.split('\n')[:10]  # Берем первые 10 строк текста
+        
+        # Генерируем изображение из текста
+        font = ImageFont.truetype('arial', 15)
+        img = Image.new('RGB', (500, 200), color=(73, 109, 137))
+        d = ImageDraw.Draw(img)
+        for i, line in enumerate(lines):
+            d.text((10, 10 + i*15), line, fill=(255, 255, 0), font=font)
+        
+        byte_arr = io.BytesIO()
+        img.save(byte_arr, format='PNG')
         return byte_arr.getvalue()
     
     @staticmethod
