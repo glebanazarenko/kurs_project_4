@@ -5,6 +5,9 @@ import argparse
 import json
 import math
 import fitz
+import subprocess
+import tempfile
+import re
 import ebooklib #для работы с ePub-файлами
 from ebooklib import epub
 from bs4 import BeautifulSoup #для обработки HTML-кода в ePub-файлах
@@ -18,6 +21,11 @@ from pdf2image import convert_from_path
 from docx import Document
 from docx.opc.exceptions import PackageNotFoundError
 import docx2txt
+from odf.opendocument import load
+from odf.namespaces import OFFICENS
+from odf import meta
+from odf import text
+from odf import teletype
 from jinja2 import Environment, FileSystemLoader
 import base64
 
@@ -106,38 +114,47 @@ class BookAnalyzer:
                 author = dc_metadata['creator'][0][0] if dc_metadata and 'creator' in dc_metadata else None
             
             elif file_ext == '.docx':
-                try:
-                    document = Document(file_path)
-                    # Заголовок файла будет использоваться как название
-                    title = document.core_properties.title or os.path.splitext(os.path.basename(file_path))[0]
-                    # Информация об авторе
-                    author = document.core_properties.author
-                    # Размер файла
-                    file_size = pretty_size(os.path.getsize(file_path))
-                    # Количество страниц в docx файлах обычно не доступно
-                    num_pages = self.__count_pages_docx(file_path)
-                    # Метаданные из core_properties
-                    metadata = {
-                        'author': document.core_properties.author,
-                        'title': document.core_properties.title,
-                        'subject': document.core_properties.subject,
-                        'keywords': document.core_properties.keywords,
-                        'last_modified_by': document.core_properties.last_modified_by,
-                        'created': document.core_properties.created,
-                        'modified': document.core_properties.modified,
-                        'category': document.core_properties.category,
-                        'comments': document.core_properties.comments,
-                        'content_status': document.core_properties.content_status,
-                        'identifier': document.core_properties.identifier,
-                        'language': document.core_properties.language,
-                        'version': document.core_properties.version,
-                        'last_printed': document.core_properties.last_printed,
-                        'revision': document.core_properties.revision,
-                    }
-                    preview = self.__get_docx_preview(file_path)
-                    # Затем производим обновление данных в БД, как и ранее
-                except PackageNotFoundError:
-                    print(f"Failed to process file {file_path}. Reason: File not found")
+                document = Document(file_path)
+                # Заголовок файла будет использоваться как название
+                title = document.core_properties.title or os.path.splitext(os.path.basename(file_path))[0]
+                # Информация об авторе
+                author = document.core_properties.author
+                # Размер файла
+                file_size = pretty_size(os.path.getsize(file_path))
+                # Количество страниц в docx файлах обычно не доступно
+                num_pages = self.__count_pages_docx(file_path)
+                # Метаданные из core_properties
+                metadata = {
+                    'author': document.core_properties.author,
+                    'title': document.core_properties.title,
+                    'subject': document.core_properties.subject,
+                    'keywords': document.core_properties.keywords,
+                    'last_modified_by': document.core_properties.last_modified_by,
+                    'created': document.core_properties.created,
+                    'modified': document.core_properties.modified,
+                    'category': document.core_properties.category,
+                    'comments': document.core_properties.comments,
+                    'content_status': document.core_properties.content_status,
+                    'identifier': document.core_properties.identifier,
+                    'language': document.core_properties.language,
+                    'version': document.core_properties.version,
+                    'last_printed': document.core_properties.last_printed,
+                    'revision': document.core_properties.revision,
+                }
+                preview = self.__get_docx_preview(file_path)
+            elif file_ext == '.odt':
+                # Загрузим документ
+                document = load(file_path)
+                # Извлечем метаданные
+                #metadata = self.extract_odt_metadata(file_path)
+                metadata = None
+                # Заголовок
+                title = os.path.splitext(os.path.basename(file_path))[0]
+                # Автор (если доступен)
+                author = None
+                # Количество страниц (если доступно)
+                num_pages = None
+                preview = self.__get_odt_preview(file_path)
 
             print(metadata)
 
@@ -237,6 +254,71 @@ class BookAnalyzer:
         for i, line in enumerate(lines):
             d.text((10, 10 + i*15), line, fill=(255, 255, 0), font=font)
         
+        byte_arr = io.BytesIO()
+        img.save(byte_arr, format='PNG')
+        return byte_arr.getvalue()
+    
+    @staticmethod
+    def extract_odt_metadata(file_path):
+        doc = load(file_path)
+        meta_info = doc.getElementsByType(meta.Meta)
+        
+        if meta_info:
+            meta_info = teletype.extractText(meta_info[0])
+            # Делаем предположение о том, как данные разделены, и разделяем строку
+            meta_info_parts = re.split(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)", meta_info)
+            software_used, title, author, username, *dates, edit_cycles, duration = meta_info_parts
+
+            metadata = {
+                'software_used': software_used,
+                'title': title,
+                'author': author,
+                'username': username,
+                'dates': dates,
+                'edit_cycles': edit_cycles,
+                'edit_duration': duration
+            }
+            
+            return metadata
+        else:
+            return None
+
+    @staticmethod
+    def __get_odt_metadata2(file_path):
+        doc = load(file_path)
+        meta = doc.meta
+
+        metadata = {
+            'title': teletype.extractText(meta.title) if meta.title else None,
+            'description': teletype.extractText(meta.description) if meta.description else None,
+            'subject': teletype.extractText(meta.subject) if meta.subject else None,
+            'language': teletype.extractText(meta.language) if meta.language else None,
+            'editing_cycles': teletype.extractText(meta.editingcycles) if meta.editingcycles else None,
+            'editing_duration': teletype.extractText(meta.editingduration) if meta.editingduration else None,
+            'date': teletype.extractText(meta.date) if meta.date else None,
+            'creator': teletype.extractText(meta.creator) if meta.creator else None,
+            'keyword': teletype.extractText(meta.keyword) if meta.keyword else None,
+        }
+        
+        return metadata
+    
+    @staticmethod
+    def __get_odt_preview(file_path):
+        # Загружаем документ
+        doc = load(file_path)
+        # Извлекаем текст из каждого элемента 'P' и объединяем их с новыми строками
+        all_text = "\n".join(teletype.extractText(p) for p in doc.getElementsByType(text.P))
+        # Берем первые 10 строк текста
+        lines = all_text.split('\n')[:10]
+        
+        # Генерируем изображение из текста
+        font = ImageFont.truetype('arial', 15)
+        img = Image.new('RGB', (500, 200), color=(73, 109, 137))
+        d = ImageDraw.Draw(img)
+        for i, line in enumerate(lines):
+            d.text((10, 10 + i*15), line, fill=(255, 255, 0), font=font)
+        
+        # Преобразуем изображение в байты
         byte_arr = io.BytesIO()
         img.save(byte_arr, format='PNG')
         return byte_arr.getvalue()
