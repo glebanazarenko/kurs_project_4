@@ -156,7 +156,6 @@ class BookAnalyzer:
 
                 reader = PdfReader(file_pdf)
                 metadata = reader.metadata
-                print(metadata)
                 num_pages = len(reader.pages)
                 preview = self.__get_preview(file_pdf)
 
