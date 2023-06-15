@@ -52,6 +52,13 @@ class BookAnalyzer:
         self.db_path = db_path
         self.init_database()
 
+    def open_db(self):
+        self.conn = sqlite3.connect(self.db_path)
+        return self.conn.cursor()
+    
+    def close_db(self):
+        self.conn.close()
+
     def init_database(self):
         # Создайте БД (если не существует) и определите таблицы для хранения метаданных книг и превью
         # Создаем соединение с БД, если файла нет, он будет создан
@@ -124,8 +131,6 @@ class BookAnalyzer:
                 title = document.core_properties.title or os.path.splitext(os.path.basename(file_path))[0]
                 # Информация об авторе
                 author = document.core_properties.author
-                # Размер файла
-                file_size = pretty_size(os.path.getsize(file_path))
                 # Количество страниц в docx файлах обычно не доступно
                 num_pages = self.__count_pages_docx(file_path)
                 # Метаданные из core_properties
@@ -175,7 +180,7 @@ class BookAnalyzer:
                 title = os.path.splitext(os.path.basename(file_path))[0]
 
             # Извлечение размера файла
-            file_size = pretty_size(os.path.getsize(file_path))
+            file_size = os.path.getsize(file_path)
 
             # Проверяем, есть ли уже книга в БД
             cursor.execute('SELECT * FROM books WHERE file_path = ?', (file_path,))
@@ -387,6 +392,155 @@ class BookAnalyzer:
                         self.process_directory(entry.path, file_types, exclude, max_depth, current_depth + 1)
         except PermissionError:
             print(f"Permission denied for directory: {directory}")
+
+    # ЗАПРОСЫ К БД
+    # Поиск книг по названию
+    def search_books_by_title(self, title):
+        cursor = self.open_db()
+        query = f"SELECT title, author, num_pages FROM books WHERE title LIKE '%{title}%'"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        self.close_db()
+
+        return rows
+    
+    # Поиск книг по автору
+    def search_books_by_author(self, author):
+        cursor = self.open_db()
+        query = f"SELECT title, author, num_pages FROM books WHERE author LIKE '%{author}%'"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        self.close_db()
+
+        return rows
+    
+    # Поиск книг по расширению файла
+    def search_books_by_extension(self, file_ext):
+        cursor = self.open_db()
+        query = f"SELECT title, author, file_ext FROM books WHERE file_ext = '{file_ext}'"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        self.close_db()
+
+        return rows
+
+    # Получить самые большие книги
+    def get_largest_books(self, limit=5):
+        cursor = self.open_db()
+        query = f"SELECT title, author, file_size FROM books ORDER BY file_size DESC LIMIT {limit}"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        self.close_db()
+
+        # Преобразуем размер файла в человеко-читаемый формат
+        rows = [(title, author, pretty_size(file_size)) for title, author, file_size in rows]
+
+        return rows
+    
+    # Получить книги с наибольшим количеством страниц
+    def get_books_with_most_pages(self, limit=5): 
+        cursor = self.open_db()
+        query = f"SELECT title, author, num_pages FROM books ORDER BY num_pages DESC LIMIT {limit}"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        self.close_db()
+
+        return rows
+
+    # Получить книги, добавленные последними
+    def get_recently_added_books(self, limit=5):
+        cursor = self.open_db()
+        query = f"SELECT title, author FROM books ORDER BY id DESC LIMIT {limit}"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        self.close_db()
+
+        return rows
+
+    # Получить книги без автора
+    def get_books_without_author(self):
+        cursor = self.open_db()
+        query = f"SELECT title, num_pages FROM books WHERE author IS NULL"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        self.close_db()
+
+        return rows
+
+    # Получить книги без метаданных
+    def get_books_without_metadata(self):
+        cursor = self.open_db()
+        query = f"SELECT title, file_ext, file_size FROM books WHERE metadata like 'None'"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        self.close_db()
+
+        # Преобразуем размер файла в человеко-читаемый формат
+        rows = [(title, author, pretty_size(file_size)) for title, author, file_size in rows]
+
+        return rows
+
+    # Получить статистику по расширениям файлов
+    def get_file_extension_statistics(self):
+        cursor = self.open_db()
+        query = f"SELECT file_ext, COUNT(*) as count FROM books GROUP BY file_ext"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        self.close_db()
+
+        return rows
+    
+    # Поиск книг по части метаданных
+    def search_books_by_metadata(self, metadata):
+        cursor = self.open_db()
+        query = f"SELECT title, author, metadata FROM books WHERE metadata LIKE '%{metadata}%'"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        self.close_db()
+
+        return rows
+    
+    def plot_books_pages(self):
+        cursor = self.open_db()
+        query = "SELECT title, num_pages FROM books WHERE num_pages IS NOT NULL"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        self.close_db()
+        
+        # Разделяем данные на названия книг и количество страниц
+        titles = [row[0] for row in rows]
+        num_pages = [row[1] for row in rows]
+
+        # Создаем график
+        plt.figure(figsize=(10, 6))
+        plt.barh(titles, num_pages, color='skyblue')
+        plt.xlabel('Number of Pages')
+        plt.ylabel('Book Titles')
+        plt.title('Number of Pages in Each Book')
+        plt.tight_layout()
+        plt.show()
 
     def generate_web_page(self, output_path: str):
         # Создаем соединение с БД
