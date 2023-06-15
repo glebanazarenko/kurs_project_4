@@ -26,6 +26,7 @@ from odf.namespaces import OFFICENS
 from odf import meta
 from odf import text
 from odf import teletype
+import aspose.words as aw
 from jinja2 import Environment, FileSystemLoader
 import base64
 
@@ -70,7 +71,7 @@ class BookAnalyzer:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT,
                 author TEXT,
-                publication_year INTEGER,
+                file_ext TEXT,
                 file_path TEXT UNIQUE,
                 file_size INTEGER,
                 num_pages INTEGER,
@@ -99,8 +100,12 @@ class BookAnalyzer:
                     preview = self.__get_preview(file_path)
 
                     # Извлечение данных о названии и авторе
-                    title = metadata.get('/Title')
-                    author = metadata.get('/Author')
+                    if metadata != None:
+                        title = metadata.get('/Title')
+                        author = metadata.get('/Author')
+                    else:
+                        title = None
+                        author = None
 
             elif file_ext == '.epub':
                 book = epub.read_epub(file_path)
@@ -143,20 +148,28 @@ class BookAnalyzer:
                 }
                 preview = self.__get_docx_preview(file_path)
             elif file_ext == '.odt':
-                # Загрузим документ
-                document = load(file_path)
-                # Извлечем метаданные
-                #metadata = self.extract_odt_metadata(file_path)
-                metadata = None
-                # Заголовок
-                title = os.path.splitext(os.path.basename(file_path))[0]
-                # Автор (если доступен)
-                author = None
-                # Количество страниц (если доступно)
-                num_pages = None
-                preview = self.__get_odt_preview(file_path)
+                # создаем объект Document и загружаем файл
+                doc = aw.Document(file_path)
+                file_pdf = "Output.pdf"
+                # сохраняем документ в формате pdf
+                doc.save(file_pdf, aw.SaveFormat.PDF)
 
-            print(metadata)
+                reader = PdfReader(file_pdf)
+                metadata = reader.metadata
+                print(metadata)
+                num_pages = len(reader.pages)
+                preview = self.__get_preview(file_pdf)
+
+                # Извлечение данных о названии и авторе
+                if metadata != None:
+                    title = metadata.get('/Title')
+                    author = metadata.get('/Author')
+                else:
+                    title = os.path.splitext(os.path.basename(file_pdf))[0]
+                    author = None
+                
+                os.remove(file_pdf)
+                
 
             # Если в метаданных нет названия, используем имя файла без расширения
             if not title:
@@ -174,24 +187,24 @@ class BookAnalyzer:
                 # Выполняем запрос к базе данных
 
                 # Подготавливаем данные для вставки
-                data = (file_path, title, author, file_size, str(metadata), num_pages, preview)
+                data = (file_path, title, author, file_size, str(metadata), num_pages, preview, file_ext)
 
                 cursor.execute("""
-                    INSERT OR REPLACE INTO books (file_path, title, author, file_size, metadata, num_pages, preview)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO books (file_path, title, author, file_size, metadata, num_pages, preview, file_ext)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, data)
             else:
                 # Если книга уже есть в БД, обновляем ее
 
                 # Подготавливаем данные для вставки
-                data = (title, author, file_size, str(metadata), num_pages, preview, file_path)
+                data = (title, author, file_size, str(metadata), num_pages, preview, file_ext, file_path)
 
                 cursor.execute('''
-                    UPDATE books SET title = ?, author = ?, file_size = ?, metadata = ?, num_pages = ?, preview = ?
+                    UPDATE books SET title = ?, author = ?, file_size = ?, metadata = ?, num_pages = ?, preview = ?, file_ext = ?
                     WHERE file_path = ?
                 ''', data)
         except Exception as e:
-            print(f"Failed to process file {file_path}. Reason: {e}")
+            print(f"Ошибка в работе с файлом {file_path}. Причина: {e}")
         
         # Сохраняем изменения и закрываем соединение
         conn.commit()
