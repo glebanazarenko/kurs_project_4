@@ -347,15 +347,14 @@ class BookAnalyzer:
     
     def __get_all_previews(self):
         # Создаем соединение с БД
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        cursor = self.open_db()
 
         # Получаем все превью из БД
         cursor.execute('SELECT title, preview FROM books')
         previews = cursor.fetchall()
 
         # Закрываем соединение
-        conn.close()
+        self.close_db()
 
         # Возвращаем список кортежей вида (название книги, превью)
         return previews
