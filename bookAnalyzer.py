@@ -414,14 +414,17 @@ class BookAnalyzer:
             print(f"Permission denied for directory: {directory}")
 
     # ЗАПРОСЫ К БД
-    def display_all_books(self):
+    def get_all_books(self):
         cursor = self.open_db()
-        query = "SELECT id, title, author, file_ext, file_path, file_size, num_pages, metadata FROM books"
+        query = "SELECT preview, title, author, file_ext, file_path, file_size, num_pages, metadata FROM books"
 
         cursor.execute(query)
         rows = cursor.fetchall()
 
         self.close_db()
+
+        # Преобразуем размер файла в человеко-читаемый формат
+        rows = [(preview, title, author, file_ext, file_path, pretty_size(file_size), num_pages, metadata) for preview, title, author, file_ext, file_path, file_size, num_pages, metadata in rows]
 
         return rows
 
@@ -440,7 +443,7 @@ class BookAnalyzer:
     # Поиск книг по автору
     def search_books_by_author(self, author):
         cursor = self.open_db()
-        query = f"SELECT title, author, num_pages FROM books WHERE author LIKE '%{author}%'"
+        query = f"SELECT title, author, num_pages, file_path FROM books WHERE author LIKE '%{author}%'"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -452,7 +455,7 @@ class BookAnalyzer:
     # Поиск книг по расширению файла
     def search_books_by_extension(self, file_ext):
         cursor = self.open_db()
-        query = f"SELECT title, author, file_ext FROM books WHERE file_ext LIKE '%{file_ext}%'"
+        query = f"SELECT title, author, file_ext, file_path FROM books WHERE file_ext LIKE '%{file_ext}%'"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -464,7 +467,7 @@ class BookAnalyzer:
     # Получить самые большие книги
     def get_largest_books(self, limit=5, offset=0):
         cursor = self.open_db()
-        query = f"SELECT title, author, file_size FROM books ORDER BY file_size DESC LIMIT {limit} OFFSET {offset}"
+        query = f"SELECT title, author, file_size, file_path FROM books ORDER BY file_size DESC LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -472,14 +475,14 @@ class BookAnalyzer:
         self.close_db()
 
         # Преобразуем размер файла в человеко-читаемый формат
-        rows = [(title, author, pretty_size(file_size)) for title, author, file_size in rows]
+        rows = [(title, author, pretty_size(file_size), file_path) for title, author, file_size, file_path in rows]
 
         return rows
     
     # Получить книги с наибольшим количеством страниц
     def get_books_with_most_pages(self, limit=5, offset=0): 
         cursor = self.open_db()
-        query = f"SELECT title, author, num_pages FROM books ORDER BY num_pages DESC LIMIT {limit} OFFSET {offset}"
+        query = f"SELECT title, author, num_pages, file_path FROM books ORDER BY num_pages DESC LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -491,7 +494,7 @@ class BookAnalyzer:
     # Получить книги, добавленные последними
     def get_recently_added_books(self, limit=5, offset=0):
         cursor = self.open_db()
-        query = f"SELECT title, author FROM books ORDER BY id DESC LIMIT {limit} OFFSET {offset}"
+        query = f"SELECT title, author, file_path FROM books ORDER BY id DESC LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -503,7 +506,7 @@ class BookAnalyzer:
     # Получить книги без автора
     def get_books_without_author(self):
         cursor = self.open_db()
-        query = f"SELECT title, num_pages FROM books WHERE author IS NULL"
+        query = f"SELECT title, num_pages, file_path FROM books WHERE author IS NULL"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -515,7 +518,7 @@ class BookAnalyzer:
     # Получить книги без метаданных
     def get_books_without_metadata(self):
         cursor = self.open_db()
-        query = f"SELECT title, file_ext, file_size FROM books WHERE metadata like 'None'"
+        query = f"SELECT title, file_ext, file_size, file_path FROM books WHERE metadata like 'None'"
 
         cursor.execute(query)
         rows = cursor.fetchall()
