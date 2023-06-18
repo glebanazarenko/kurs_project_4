@@ -22,7 +22,7 @@ class App:
         self.text_widget.grid(row=1, column=0, columnspan=4, sticky="nsew")
         self.text_widget.configure(state='disabled')  # делаем текстовое поле read-only
 
-        self.display_button = tk.Button(self.root, text="Показать книги", command=self.display_books)
+        self.display_button = tk.Button(self.root, text="Показать книги", command=self.display_all_books)
         self.display_button.grid(row=0, column=0)
 
         self.process_directory_button = tk.Button(self.root, text="Обработать директорию", command=self.process_directory)
@@ -53,10 +53,11 @@ class App:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=1)  # Изменим номер строки для растягиваемости, т.к. текстовое поле теперь во второй строке (нумерация с 0)
 
-    def display_books(self):
+    def display_all_books(self):
         try:
-            self.tree = ttk.Treeview(self.root, columns=('Preview', 'Title', 'Author', 'File Ext', 'File Path', 'File Size', 'Num Pages', 'Metadata'), show='headings')
-            self.tree.heading('Preview', text='Превью')
+            # Создаем новую таблицу с нужными столбцами
+            self.tree = ttk.Treeview(self.root, columns=('ID', 'Title', 'Author', 'File Ext', 'File Path', 'File Size', 'Num Pages', 'Metadata'), show='headings')
+            self.tree.heading('ID', text='ID')
             self.tree.heading('Title', text='Название')
             self.tree.heading('Author', text='Автор')
             self.tree.heading('File Ext', text='Расширение файла')
@@ -66,14 +67,25 @@ class App:
             self.tree.heading('Metadata', text='Метаданные')
             self.tree.grid(row=1, column=0, columnspan=8, sticky="nsew")
 
-            self.tree_images = []  # Сохраняем наши изображения здесь
-
             def open_file(event):
                 item = self.tree.identify('item', event.x, event.y)
-                file_path = self.tree.item(item, "values")[4]  # Путь к файлу хранится в 5-м столбце
+                file_path = self.tree.item(item, "values")[4]  # предполагается, что путь к файлу хранится в 5-м столбце
                 os.startfile(file_path)
 
+            def show_preview(event):
+                item = self.tree.identify('item', event.x, event.y)
+                preview_bytes = self.tree.item(item, "values")[8]  # Предполагается, что превью книги хранится в 9-м столбце
+                print(preview_bytes)
+                #image = Image.open(BytesIO(preview_bytes))
+
+                # Создаем новое окно и добавляем в него изображение
+                #plt.figure()
+                #plt.imshow(image)
+                #plt.axis('off')
+                #plt.show()
+
             self.tree.bind('<Double-1>', open_file)
+            self.tree.bind('<Double-3>', show_preview)  # Правый клик для предварительного просмотра
 
             books = self.analyzer.get_all_books()
 
@@ -83,17 +95,10 @@ class App:
 
             # Вставляем новые данные
             for book in books:
-                tree_item = self.tree.insert('', 'end', values=book[1:])  # Пропускаем превью при вставке
-                preview_bytes = book[0]
-                image = Image.open(BytesIO(preview_bytes))
-                image.thumbnail((100, 100))  # Задаем размер превью
-                photo_image = ImageTk.PhotoImage(image)
-                self.tree_images.append(photo_image)  # Сохраняем изображение, чтобы оно не было удалено
-                self.tree.item(tree_item, image=photo_image, text="")  # Устанавливаем изображение для элемента
+                self.tree.insert('', 'end', values=book)
 
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
-
 
     def process_directory(self):
         try:

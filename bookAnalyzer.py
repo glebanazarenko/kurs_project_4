@@ -416,7 +416,7 @@ class BookAnalyzer:
     # ЗАПРОСЫ К БД
     def get_all_books(self):
         cursor = self.open_db()
-        query = "SELECT preview, title, author, file_ext, file_path, file_size, num_pages, metadata FROM books"
+        query = "SELECT id, title, author, file_ext, file_path, file_size, num_pages, metadata, preview FROM books"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -424,7 +424,7 @@ class BookAnalyzer:
         self.close_db()
 
         # Преобразуем размер файла в человеко-читаемый формат
-        rows = [(preview, title, author, file_ext, file_path, pretty_size(file_size), num_pages, metadata) for preview, title, author, file_ext, file_path, file_size, num_pages, metadata in rows]
+        rows = [(id, title, author, file_ext, file_path, pretty_size(file_size), num_pages, metadata, preview) for id, title, author, file_ext, file_path, file_size, num_pages, metadata, preview in rows]
 
         return rows
 
