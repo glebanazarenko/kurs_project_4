@@ -48,8 +48,11 @@ def pretty_size(size_bytes: int) -> str:
     return f"{size_str} {units[exp]}"
 
 class BookAnalyzer:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, reset=False, convert_docx_to_pdf=False, convert_odt_to_pdf=False):
         self.db_path = db_path
+        self.reset = reset
+        self.convert_docx_to_pdf = convert_docx_to_pdf
+        self.convert_odt_to_pdf = convert_odt_to_pdf
         self.init_database()
 
     def open_db(self):
@@ -67,10 +70,11 @@ class BookAnalyzer:
         # Создаем курсор для выполнения SQL-запросов
         cursor = conn.cursor()
 
-        #удаление таблицы в бд
-        cursor.execute('''
-            DROP TABLE IF EXISTS books
-        ''')
+        # Удаление таблицы в бд, если reset = True
+        if self.reset:
+            cursor.execute('''
+                DROP TABLE IF EXISTS books
+            ''')
 
         # Создаем таблицу, если она не существует
         cursor.execute('''
@@ -126,53 +130,45 @@ class BookAnalyzer:
                 author = dc_metadata['creator'][0][0] if dc_metadata and 'creator' in dc_metadata else None
             
             elif file_ext == '.docx':
-                document = Document(file_path)
-                # Заголовок файла будет использоваться как название
-                title = document.core_properties.title or os.path.splitext(os.path.basename(file_path))[0]
-                # Информация об авторе
-                author = document.core_properties.author
-                # Количество страниц в docx файлах обычно не доступно
-                num_pages = self.__count_pages_docx(file_path)
-                # Метаданные из core_properties
-                metadata = {
-                    'author': document.core_properties.author,
-                    'title': document.core_properties.title,
-                    'subject': document.core_properties.subject,
-                    'keywords': document.core_properties.keywords,
-                    'last_modified_by': document.core_properties.last_modified_by,
-                    'created': document.core_properties.created,
-                    'modified': document.core_properties.modified,
-                    'category': document.core_properties.category,
-                    'comments': document.core_properties.comments,
-                    'content_status': document.core_properties.content_status,
-                    'identifier': document.core_properties.identifier,
-                    'language': document.core_properties.language,
-                    'version': document.core_properties.version,
-                    'last_printed': document.core_properties.last_printed,
-                    'revision': document.core_properties.revision,
-                }
-                preview = self.__get_docx_preview(file_path)
-            elif file_ext == '.odt':
-                # создаем объект Document и загружаем файл
-                doc = aw.Document(file_path)
-                file_pdf = "Output.pdf"
-                # сохраняем документ в формате pdf
-                doc.save(file_pdf, aw.SaveFormat.PDF)
-
-                reader = PdfReader(file_pdf)
-                metadata = reader.metadata
-                num_pages = len(reader.pages)
-                preview = self.__get_preview(file_pdf)
-
-                # Извлечение данных о названии и авторе
-                if metadata != None:
-                    title = metadata.get('/Title')
-                    author = metadata.get('/Author')
+                if self.convert_docx_to_pdf:
+                    metadata, num_pages, preview, title, author = self.__convert_to_pdf(file_path)
                 else:
-                    title = os.path.splitext(os.path.basename(file_pdf))[0]
+                    document = Document(file_path)
+                    # Заголовок файла будет использоваться как название
+                    title = document.core_properties.title or os.path.splitext(os.path.basename(file_path))[0]
+                    # Информация об авторе
+                    author = document.core_properties.author
+                    # Количество страниц в docx файлах обычно не доступно
+                    num_pages = self.__count_pages_docx(file_path)
+                    # Метаданные из core_properties
+                    metadata = {
+                        'author': document.core_properties.author,
+                        'title': document.core_properties.title,
+                        'subject': document.core_properties.subject,
+                        'keywords': document.core_properties.keywords,
+                        'last_modified_by': document.core_properties.last_modified_by,
+                        'created': document.core_properties.created,
+                        'modified': document.core_properties.modified,
+                        'category': document.core_properties.category,
+                        'comments': document.core_properties.comments,
+                        'content_status': document.core_properties.content_status,
+                        'identifier': document.core_properties.identifier,
+                        'language': document.core_properties.language,
+                        'version': document.core_properties.version,
+                        'last_printed': document.core_properties.last_printed,
+                        'revision': document.core_properties.revision,
+                    }
+                    preview = self.__get_docx_preview(file_path)
+            elif file_ext == '.odt':
+                if self.convert_odt_to_pdf:
+                    metadata, num_pages, preview, title, author = self.__convert_to_pdf(file_path)
+                else:
+                    # Извлечение метаданных из файла odt без преобразования в pdf
+                    metadata = None
+                    num_pages = None
+                    title = None
                     author = None
-                
-                os.remove(file_pdf)
+                    preview = self.__get_odt_preview(file_path)
                 
 
             # Если в метаданных нет названия, используем имя файла без расширения
@@ -301,7 +297,7 @@ class BookAnalyzer:
             return None
 
     @staticmethod
-    def __get_odt_metadata2(file_path):
+    def __get_odt_metadata(file_path):
         doc = load(file_path)
         meta = doc.meta
 
@@ -343,6 +339,27 @@ class BookAnalyzer:
     @staticmethod
     def __count_generator_items(generator):
             return sum(1 for _ in generator)
+    
+    def __convert_to_pdf(self, file_path):
+        # создаем объект Document и загружаем файл
+        doc = aw.Document(file_path)
+        file_pdf = "Output.pdf"
+        # сохраняем документ в формате pdf
+        doc.save(file_pdf, aw.SaveFormat.PDF)
+        reader = PdfReader(file_pdf)
+        metadata = reader.metadata
+        num_pages = len(reader.pages)
+        preview = self.__get_preview(file_pdf)
+        # Извлечение данных о названии и авторе
+        try:
+            title = metadata.get('/Title')
+            author = metadata.get('/Author')
+        except Exception as e:
+            title = os.path.splitext(os.path.basename(file_pdf))[0]
+            author = None
+            
+        os.remove(file_pdf)
+        return metadata, num_pages, preview, title, author
 
     
     def __get_all_previews(self):
@@ -375,7 +392,11 @@ class BookAnalyzer:
             plt.axis('off')
             plt.show()
     
-    def process_directory(self, directory, file_types, exclude, max_depth, current_depth=0):
+    def process_directory(self, directory, file_types, exclude, max_depth, current_depth=0, convert_odt_to_pdf=None, convert_docx_to_pdf=None):
+        if convert_odt_to_pdf is not None:
+            self.convert_odt_to_pdf = convert_odt_to_pdf
+        if convert_docx_to_pdf is not None:
+            self.convert_docx_to_pdf = convert_docx_to_pdf
         # Обработка каталога (рекурсивно), обновление информации о книгах в БД
         if current_depth > max_depth:
             return
@@ -430,9 +451,9 @@ class BookAnalyzer:
         return rows
 
     # Получить самые большие книги
-    def get_largest_books(self, limit=5):
+    def get_largest_books(self, limit=5, offset=0):
         cursor = self.open_db()
-        query = f"SELECT title, author, file_size FROM books ORDER BY file_size DESC LIMIT {limit}"
+        query = f"SELECT title, author, file_size FROM books ORDER BY file_size DESC LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -445,9 +466,9 @@ class BookAnalyzer:
         return rows
     
     # Получить книги с наибольшим количеством страниц
-    def get_books_with_most_pages(self, limit=5): 
+    def get_books_with_most_pages(self, limit=5, offset=0): 
         cursor = self.open_db()
-        query = f"SELECT title, author, num_pages FROM books ORDER BY num_pages DESC LIMIT {limit}"
+        query = f"SELECT title, author, num_pages FROM books ORDER BY num_pages DESC LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -457,9 +478,9 @@ class BookAnalyzer:
         return rows
 
     # Получить книги, добавленные последними
-    def get_recently_added_books(self, limit=5):
+    def get_recently_added_books(self, limit=5, offset=0):
         cursor = self.open_db()
-        query = f"SELECT title, author FROM books ORDER BY id DESC LIMIT {limit}"
+        query = f"SELECT title, author FROM books ORDER BY id DESC LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()
