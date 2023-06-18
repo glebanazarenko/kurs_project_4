@@ -414,10 +414,21 @@ class BookAnalyzer:
             print(f"Permission denied for directory: {directory}")
 
     # ЗАПРОСЫ К БД
+    def display_all_books(self):
+        cursor = self.open_db()
+        query = "SELECT id, title, author, file_ext, file_path, file_size, num_pages, metadata FROM books"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        self.close_db()
+
+        return rows
+
     # Поиск книг по названию
     def search_books_by_title(self, title):
         cursor = self.open_db()
-        query = f"SELECT title, author, num_pages FROM books WHERE title LIKE '%{title}%'"
+        query = f"SELECT title, author, num_pages, file_path FROM books WHERE title LIKE '%{title}%'"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -441,7 +452,7 @@ class BookAnalyzer:
     # Поиск книг по расширению файла
     def search_books_by_extension(self, file_ext):
         cursor = self.open_db()
-        query = f"SELECT title, author, file_ext FROM books WHERE file_ext = '{file_ext}'"
+        query = f"SELECT title, author, file_ext FROM books WHERE file_ext LIKE '%{file_ext}%'"
 
         cursor.execute(query)
         rows = cursor.fetchall()
