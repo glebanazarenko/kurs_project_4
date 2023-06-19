@@ -392,7 +392,7 @@ class BookAnalyzer:
             plt.axis('off')
             plt.show()
     
-    def process_directory(self, directory, file_types, exclude, max_depth, current_depth=0, convert_odt_to_pdf=None, convert_docx_to_pdf=None):
+    def process_directory(self, directory, file_types, exclude, max_depth = 5, current_depth=0, convert_odt_to_pdf=None, convert_docx_to_pdf=None):
         if convert_odt_to_pdf is not None:
             self.convert_odt_to_pdf = convert_odt_to_pdf
         if convert_docx_to_pdf is not None:
@@ -416,7 +416,7 @@ class BookAnalyzer:
     # ЗАПРОСЫ К БД
     def get_all_books(self):
         cursor = self.open_db()
-        query = "SELECT id, title, author, file_ext, file_path, file_size, num_pages, metadata, preview FROM books"
+        query = "SELECT id, title, author, file_ext, file_path, file_size, num_pages, metadata FROM books"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -424,7 +424,7 @@ class BookAnalyzer:
         self.close_db()
 
         # Преобразуем размер файла в человеко-читаемый формат
-        rows = [(id, title, author, file_ext, file_path, pretty_size(file_size), num_pages, metadata, preview) for id, title, author, file_ext, file_path, file_size, num_pages, metadata, preview in rows]
+        rows = [(id, title, author, file_ext, file_path, pretty_size(file_size), num_pages, metadata) for id, title, author, file_ext, file_path, file_size, num_pages, metadata in rows]
 
         return rows
     
@@ -433,6 +433,17 @@ class BookAnalyzer:
         query = f"SELECT preview FROM books WHERE id = ?"
 
         cursor.execute(query, (book_id,))
+        row = cursor.fetchone()
+
+        self.close_db()
+
+        return row[0] if row else None
+    
+    def get_book_preview_path(self, file_path):
+        cursor = self.open_db()
+        query = f"SELECT preview FROM books WHERE file_path = ?"
+
+        cursor.execute(query, (file_path,))
         row = cursor.fetchone()
 
         self.close_db()
@@ -537,7 +548,7 @@ class BookAnalyzer:
         self.close_db()
 
         # Преобразуем размер файла в человеко-читаемый формат
-        rows = [(title, author, pretty_size(file_size)) for title, author, file_size in rows]
+        rows = [(title, author, pretty_size(file_size), file_path) for title, author, file_size, file_path in rows]
 
         return rows
 

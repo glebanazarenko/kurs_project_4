@@ -22,7 +22,7 @@ class App:
         self.text_widget.grid(row=1, column=0, columnspan=4, sticky="nsew")
         self.text_widget.configure(state='disabled')  # делаем текстовое поле read-only
 
-        self.display_button = tk.Button(self.root, text="Показать книги", command=self.display_all_books)
+        self.display_button = tk.Button(self.root, text="Показать все книги", command=self.display_all_books)
         self.display_button.grid(row=0, column=0)
 
         self.process_directory_button = tk.Button(self.root, text="Обработать директорию", command=self.process_directory)
@@ -115,31 +115,114 @@ class App:
     def process_directory(self):
         try:
             directory = filedialog.askdirectory()
-            file_types = simpledialog.askstring("Ввод", "Введите типы файлов (через запятую):")
-            file_types = [file_type.strip() for file_type in file_types.split(',')]
-            exclude = simpledialog.askstring("Ввод", "Введите директории для исключения (через запятую):")
-            exclude = [dir_.strip() for dir_ in exclude.split(',')]
-            max_depth = simpledialog.askinteger("Ввод", "Введите максимальную глубину:")
-            convert_odt_to_pdf = simpledialog.askstring("Ввод", "Конвертировать ODT в PDF? (д/н):").lower() == 'д'
-            convert_docx_to_pdf = simpledialog.askstring("Ввод", "Конвертировать DOCX в PDF? (д/н):").lower() == 'д'
 
-            self.analyzer.process_directory(directory, file_types=file_types, exclude=exclude,
-                                            max_depth=max_depth, convert_odt_to_pdf=convert_odt_to_pdf,
-                                            convert_docx_to_pdf=convert_docx_to_pdf)
-            messagebox.showinfo("Успех", "Директория обработана успешно")
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Выбор параметров обработки")
+
+            # Для хранения значений
+            file_types = tk.StringVar(value='odt,docx,pdf,epub')
+            exclude_dirs = tk.StringVar(value='')
+            max_depth = tk.IntVar(value=1)
+            convert_odt_to_pdf = tk.BooleanVar(value=False)
+            convert_docx_to_pdf = tk.BooleanVar(value=False)
+
+            # Виджеты для ввода данных
+            tk.Label(dialog, text="Типы файлов (через запятую):").pack()
+            tk.Entry(dialog, textvariable=file_types).pack()
+
+            tk.Label(dialog, text="Исключить директории (через запятую):").pack()
+            tk.Entry(dialog, textvariable=exclude_dirs).pack()
+
+            tk.Label(dialog, text="Максимальная глубина:").pack()
+            tk.Spinbox(dialog, from_=1, to=10, textvariable=max_depth).pack()
+
+            tk.Label(dialog, text="Конвертировать ODT в PDF:").pack()
+            tk.Radiobutton(dialog, text="Да", variable=convert_odt_to_pdf, value=True).pack()
+            tk.Radiobutton(dialog, text="Нет", variable=convert_odt_to_pdf, value=False).pack()
+
+            tk.Label(dialog, text="Конвертировать DOCX в PDF:").pack()
+            tk.Radiobutton(dialog, text="Да", variable=convert_docx_to_pdf, value=True).pack()
+            tk.Radiobutton(dialog, text="Нет", variable=convert_docx_to_pdf, value=False).pack()
+
+            def on_submit():
+                file_types_list = [file_type.strip() for file_type in file_types.get().split(',')]
+                exclude_dirs_list = [dir_.strip() for dir_ in exclude_dirs.get().split(',')]
+                self.analyzer.process_directory(directory, file_types=file_types_list, exclude=exclude_dirs_list,
+                                            max_depth=max_depth.get(),
+                                            convert_odt_to_pdf=convert_odt_to_pdf.get(),
+                                            convert_docx_to_pdf=convert_docx_to_pdf.get())
+                messagebox.showinfo("Успех", "Директория обработана успешно")
+                dialog.destroy()
+
+            tk.Button(dialog, text="Подтвердить", command=on_submit).pack()
+
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
             
     def reset_database(self):
         try:
-            reset = simpledialog.askstring("Ввод", "Перезапустить базу данных? (д/н):").lower() == 'д'
-            convert_odt_to_pdf = simpledialog.askstring("Ввод", "Конвертировать ODT в PDF? (д/н):").lower() == 'д'
-            convert_docx_to_pdf = simpledialog.askstring("Ввод", "Конвертировать DOCX в PDF? (д/н):").lower() == 'д'
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Перезапуск базы данных")
 
-            self.analyzer = BookAnalyzer('books.db', reset=reset, convert_odt_to_pdf=convert_odt_to_pdf, convert_docx_to_pdf=convert_docx_to_pdf)
-            messagebox.showinfo("Успех", "База данных перезапущена успешно")
+            # Для хранения значений
+            reset_database = tk.BooleanVar(value=False)
+
+            # Виджеты для ввода данных
+            warning_label = tk.Label(dialog, text="Вы уверены? Это приведет к потери данных, что есть в приложении.", fg="red")
+            warning_label.pack()
+
+            reset_label = tk.Label(dialog, text="Перезапустить базу данных?")
+            reset_label.pack()
+            yes_button = tk.Radiobutton(dialog, text="Да", variable=reset_database, value=True)
+            yes_button.pack()
+            no_button = tk.Radiobutton(dialog, text="Нет", variable=reset_database, value=False)
+            no_button.pack()
+
+            def on_submit():
+                if reset_database.get():
+                    self.analyzer = BookAnalyzer('books.db', reset=reset_database.get())
+                    messagebox.showinfo("Успех", "База данных перезапущена успешно")
+                else:
+                    messagebox.showinfo("Спасибо", "Вы сохранили жизнь книгам")
+                dialog.destroy()
+
+            submit_button = tk.Button(dialog, text="Подтвердить", command=on_submit)
+            submit_button.pack()
+
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
+
+    def open_file(self, tree):
+        def op_file(event):
+            item = tree.identify('item', event.x, event.y)
+            file_path = tree.item(item, "values")[-1]  # Путь к файлу хранится в последнем столбце
+            os.startfile(file_path)
+
+        tree.bind('<Double-1>', op_file) # реагирует на ЛКМ
+
+
+    def bind_preview(self, tree):
+        def open_file(event):
+            item = tree.identify('item', event.x, event.y)
+            file_path = tree.item(item, "values")[-1]  # Путь к файлу хранится в последнем столбце
+
+            # Получаем данные предварительного просмотра из базы данных
+            preview_bytes = self.analyzer.get_book_preview_path(file_path)
+
+            if preview_bytes:
+                # Преобразуем данные предварительного просмотра в изображение
+                image = Image.open(BytesIO(preview_bytes))
+
+                # Выводим изображение
+                plt.figure()
+                plt.imshow(image)
+                plt.axis('off')
+                plt.show()
+
+            else:
+                messagebox.showinfo("Превью", "Нет Превью для этой книги.")
+
+        tree.bind('<Double-3>', open_file) # реагирует на ПКМ
 
     def search_books_by_title(self):
         try:
@@ -150,13 +233,8 @@ class App:
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
 
-            def open_file(event):
-                item = self.tree.identify('item', event.x, event.y)
-                file_path = self.tree.item(item, "values")[3]  # предполагается, что путь к файлу хранится в 4-м столбце
-                os.startfile(file_path)
-
-            self.tree.bind('<Double-1>', open_file)
-
+            self.open_file(self.tree)
+            self.bind_preview(self.tree)
 
             title = simpledialog.askstring("Ввод", "Введите название книги:")
             books = self.analyzer.search_books_by_title(title)
@@ -180,13 +258,8 @@ class App:
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
 
-            def open_file(event):
-                item = self.tree.identify('item', event.x, event.y)
-                file_path = self.tree.item(item, "values")[3]  # предполагается, что путь к файлу хранится в 4-м столбце
-                os.startfile(file_path)
-
-            self.tree.bind('<Double-1>', open_file)
-
+            self.open_file(self.tree)
+            self.bind_preview(self.tree)
 
             author = simpledialog.askstring("Ввод", "Введите имя автора:")
             books = self.analyzer.search_books_by_author(author)
@@ -210,12 +283,8 @@ class App:
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
 
-            def open_file(event):
-                item = self.tree.identify('item', event.x, event.y)
-                file_path = self.tree.item(item, "values")[3]  # предполагается, что путь к файлу хранится в 4-м столбце
-                os.startfile(file_path)
-
-            self.tree.bind('<Double-1>', open_file)
+            self.open_file(self.tree)
+            self.bind_preview(self.tree)
 
             extension = simpledialog.askstring("Ввод", "Введите расширение файла:")
             books = self.analyzer.search_books_by_extension(extension)
@@ -233,7 +302,7 @@ class App:
     def display_largest_books(self):
         try:
             self.tree = ttk.Treeview(self.root, columns=('Rank', 'Title', 'Author', 'Size', 'Path'), show='headings')
-            self.tree.column('Rank', width=50)  # Здесь мы задаём ширину столбца 'Rank'
+            self.tree.column('Rank', width=30)  # Здесь мы задаём ширину столбца 'Rank'
             self.tree.heading('Rank', text='Ранг')
             self.tree.heading('Title', text='Название')
             self.tree.heading('Author', text='Автор')
@@ -241,30 +310,43 @@ class App:
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
 
-            def open_file(event):
-                item = self.tree.identify('item', event.x, event.y)
-                file_path = self.tree.item(item, "values")[4]  # предполагается, что путь к файлу хранится в 5-м столбце
-                os.startfile(file_path)
+            self.open_file(self.tree)
+            self.bind_preview(self.tree)
 
-            self.tree.bind('<Double-1>', open_file)
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Выбор файлов")
 
-            limit = simpledialog.askstring("Ввод", "Введите сколько файлов хотите выбрать")
-            offset = simpledialog.askstring("Ввод", "Начать с ? (начинается с 1)")
-            offset = int(offset) - 1
-            books = self.analyzer.get_largest_books(int(limit), offset)
+            limit_label = tk.Label(dialog, text="Введите сколько файлов хотите выбрать")
+            limit_label.pack()
+            limit_entry = tk.Entry(dialog)
+            limit_entry.pack()
 
-            # Очищаем таблицу
-            for i in self.tree.get_children():
-                self.tree.delete(i)
+            offset_label = tk.Label(dialog, text="Начать с ? (начинается с 1)")
+            offset_label.pack()
+            offset_entry = tk.Entry(dialog)
+            offset_entry.pack()
 
-            # Вставляем новые данные
-            for i, book in enumerate(books, start=1 + int(offset)):
-                self.tree.insert('', 'end', values=(i, *book))
+            def on_submit():
+                limit = int(limit_entry.get())
+                offset = int(offset_entry.get()) - 1
+                books = self.analyzer.get_largest_books(limit, offset)
+
+                # Очищаем таблицу
+                for i in self.tree.get_children():
+                    self.tree.delete(i)
+
+                # Вставляем новые данные
+                for i, book in enumerate(books, start=1 + offset):
+                    self.tree.insert('', 'end', values=(i, *book))
+
+                dialog.destroy()
+
+            submit_button = tk.Button(dialog, text="Подтвердить", command=on_submit)
+            submit_button.pack()
 
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
-    
     def display_books_with_most_pages(self):
         try:
             self.tree = ttk.Treeview(self.root, columns=('Rank', 'Title', 'Author', 'Num Pages', 'Path'), show='headings')
@@ -276,29 +358,42 @@ class App:
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
 
-            def open_file(event):
-                item = self.tree.identify('item', event.x, event.y)
-                file_path = self.tree.item(item, "values")[4]  # Теперь путь к файлу хранится в 5-м столбце
-                os.startfile(file_path)
+            self.open_file(self.tree)
+            self.bind_preview(self.tree)
 
-            self.tree.bind('<Double-1>', open_file)
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Выбор файлов")
 
-            limit = simpledialog.askstring("Ввод", "Введите сколько файлов хотите выбрать")
-            offset = simpledialog.askstring("Ввод", "Начать с ? (начинается с 1)")
-            offset = int(offset) - 1
-            books = self.analyzer.get_books_with_most_pages(int(limit), offset)
+            limit_label = tk.Label(dialog, text="Введите сколько файлов хотите выбрать")
+            limit_label.pack()
+            limit_entry = tk.Entry(dialog)
+            limit_entry.pack()
 
-            # Очищаем таблицу
-            for i in self.tree.get_children():
-                self.tree.delete(i)
+            offset_label = tk.Label(dialog, text="Начать с ? (начинается с 1)")
+            offset_label.pack()
+            offset_entry = tk.Entry(dialog)
+            offset_entry.pack()
 
-            # Вставляем новые данные
-            for i, book in enumerate(books, start=1 + int(offset)):
-                self.tree.insert('', 'end', values=(i, *book))
+            def on_submit():
+                limit = int(limit_entry.get())
+                offset = int(offset_entry.get()) - 1
+                books = self.analyzer.get_books_with_most_pages(limit, offset)
+
+                # Очищаем таблицу
+                for i in self.tree.get_children():
+                    self.tree.delete(i)
+
+                # Вставляем новые данные
+                for i, book in enumerate(books, start=1 + offset):
+                    self.tree.insert('', 'end', values=(i, *book))
+
+                dialog.destroy()
+
+            submit_button = tk.Button(dialog, text="Подтвердить", command=on_submit)
+            submit_button.pack()
 
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
-
 
     def display_recently_added_books(self):
         try:
@@ -310,28 +405,43 @@ class App:
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
 
-            def open_file(event):
-                item = self.tree.identify('item', event.x, event.y)
-                file_path = self.tree.item(item, "values")[3]  # Теперь путь к файлу хранится в 4-м столбце
-                os.startfile(file_path)
+            self.open_file(self.tree)
+            self.bind_preview(self.tree)
 
-            self.tree.bind('<Double-1>', open_file)
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Выбор файлов")
 
-            limit = simpledialog.askstring("Ввод", "Введите сколько файлов хотите выбрать")
-            offset = simpledialog.askstring("Ввод", "Начать с ? (начинается с 1)")
-            offset = int(offset) - 1
-            books = self.analyzer.get_recently_added_books(int(limit), offset)
+            limit_label = tk.Label(dialog, text="Введите сколько файлов хотите выбрать")
+            limit_label.pack()
+            limit_entry = tk.Entry(dialog)
+            limit_entry.pack()
 
-            # Очищаем таблицу
-            for i in self.tree.get_children():
-                self.tree.delete(i)
+            offset_label = tk.Label(dialog, text="Начать с ? (начинается с 1)")
+            offset_label.pack()
+            offset_entry = tk.Entry(dialog)
+            offset_entry.pack()
 
-            # Вставляем новые данные
-            for i, book in enumerate(books, start=1 + int(offset)):
-                self.tree.insert('', 'end', values=(i, *book))
+            def on_submit():
+                limit = int(limit_entry.get())
+                offset = int(offset_entry.get()) - 1
+                books = self.analyzer.get_recently_added_books(limit, offset)
+
+                # Очищаем таблицу
+                for i in self.tree.get_children():
+                    self.tree.delete(i)
+
+                # Вставляем новые данные
+                for i, book in enumerate(books, start=1 + offset):
+                    self.tree.insert('', 'end', values=(i, *book))
+
+                dialog.destroy()
+
+            submit_button = tk.Button(dialog, text="Подтвердить", command=on_submit)
+            submit_button.pack()
 
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
+
 
     # Создаем новую функцию для отображения книг без автора
     def display_books_without_author(self):
@@ -342,12 +452,8 @@ class App:
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=3, sticky="nsew")
 
-            def open_file(event):
-                item = self.tree.identify('item', event.x, event.y)
-                file_path = self.tree.item(item, "values")[2]
-                os.startfile(file_path)
-
-            self.tree.bind('<Double-1>', open_file)
+            self.open_file(self.tree)
+            self.bind_preview(self.tree)
 
             books = self.analyzer.get_books_without_author()
 
@@ -372,12 +478,8 @@ class App:
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
 
-            def open_file(event):
-                item = self.tree.identify('item', event.x, event.y)
-                file_path = self.tree.item(item, "values")[3]
-                os.startfile(file_path)
-
-            self.tree.bind('<Double-1>', open_file)
+            self.open_file(self.tree)
+            self.bind_preview(self.tree)
 
             books = self.analyzer.get_books_without_metadata()
 
