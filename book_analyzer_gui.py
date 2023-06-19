@@ -73,16 +73,28 @@ class App:
                 os.startfile(file_path)
 
             def show_preview(event):
-                item = self.tree.identify('item', event.x, event.y)
-                preview_bytes = self.tree.item(item, "values")[8]  # Предполагается, что превью книги хранится в 9-м столбце
-                print(preview_bytes)
-                #image = Image.open(BytesIO(preview_bytes))
+                try:
+                    item = self.tree.identify('item', event.x, event.y)
+                    book_id = self.tree.item(item, "values")[0]  # предполагается, что ID книги хранится в первом столбце
 
-                # Создаем новое окно и добавляем в него изображение
-                #plt.figure()
-                #plt.imshow(image)
-                #plt.axis('off')
-                #plt.show()
+                    # Получаем данные предварительного просмотра из базы данных
+                    preview_bytes = self.analyzer.get_book_preview(book_id)
+
+                    if preview_bytes:
+                        # Преобразуем данные предварительного просмотра в изображение
+                        image = Image.open(BytesIO(preview_bytes))
+
+                        # Выводим изображение
+                        plt.figure()
+                        plt.imshow(image)
+                        plt.axis('off')
+                        plt.show()
+
+                    else:
+                        messagebox.showinfo("Превью", "Нет Превью для этой книги.")
+
+                except Exception as e:
+                    messagebox.showerror("Ошибка", str(e))
 
             self.tree.bind('<Double-1>', open_file)
             self.tree.bind('<Double-3>', show_preview)  # Правый клик для предварительного просмотра

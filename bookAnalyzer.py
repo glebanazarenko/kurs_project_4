@@ -427,6 +427,17 @@ class BookAnalyzer:
         rows = [(id, title, author, file_ext, file_path, pretty_size(file_size), num_pages, metadata, preview) for id, title, author, file_ext, file_path, file_size, num_pages, metadata, preview in rows]
 
         return rows
+    
+    def get_book_preview(self, book_id):
+        cursor = self.open_db()
+        query = f"SELECT preview FROM books WHERE id = ?"
+
+        cursor.execute(query, (book_id,))
+        row = cursor.fetchone()
+
+        self.close_db()
+
+        return row[0] if row else None
 
     # Поиск книг по названию
     def search_books_by_title(self, title):
