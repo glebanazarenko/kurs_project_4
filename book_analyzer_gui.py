@@ -4,6 +4,7 @@ from tkinter import messagebox, filedialog, simpledialog, Menu, ttk
 from bookAnalyzer import BookAnalyzer
 import matplotlib.pyplot as plt
 from PIL import Image, ImageTk
+import numpy as np
 from io import BytesIO
 
 
@@ -497,37 +498,34 @@ class App:
     def display_file_extension_statistics(self):
         try:
             # Получить статистику
-            stats = self.analyzer.get_file_extension_statistics()
+            data_list  = self.analyzer.get_file_extension_statistics()
+            data = {ext: count for ext, count in data_list}
+            total_files = sum(data.values())
+            labels = [f"{ext}: {round((count/total_files)*100, 2)}%" for ext, count in data.items()]
+            sizes = list(data.values())
 
-            # Если статистика пуста, выводим сообщение об ошибке
-            if not stats:
-                messagebox.showerror("Ошибка", "Не удалось получить статистику расширения файлов.")
-                return
-
-            # Создаем список для названий и значений
-            labels = []
-            values = []
-
-            # Заполняем списки
-            for ext, count in stats:
-                labels.append(ext)
-                values.append(count)
-
-            # Создаем фигуру и оси
             fig, ax = plt.subplots()
+            wedges, texts, autotexts = ax.pie(sizes, autopct='', pctdistance=1.1)
 
-            # Создаем круговую диаграмму
-            ax.pie(values, labels=labels, autopct='%1.1f%%')
+            bbox_props = dict(boxstyle="square,pad=0.3", fc="w", ec="k", lw=0.72)
+            kw = dict(arrowprops=dict(arrowstyle="-"),
+                    bbox=bbox_props, zorder=0, va="center")
 
-            # Добавляем название
-            ax.set_title("Статистика расширений файлов")
+            for i, p in enumerate(wedges):
+                ang = (p.theta2 - p.theta1)/2. + p.theta1
+                y = np.sin(np.deg2rad(ang))
+                x = np.cos(np.deg2rad(ang))
+                horizontalalignment = {-1: "right", 1: "left"}[int(np.sign(x))]
+                connectionstyle = "angle,angleA=0,angleB={}".format(ang)
+                kw["arrowprops"].update({"connectionstyle": connectionstyle})
+                ax.annotate(labels[i], xy=(x, y), xytext=(1.35*np.sign(x), 1.4*y),
+                            horizontalalignment=horizontalalignment, **kw)
 
             # Показываем диаграмму
             plt.show()
-
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
-    
+
     def display_books_pages_chart(self):
         try:
             self.analyzer.plot_books_pages()
