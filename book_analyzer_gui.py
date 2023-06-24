@@ -57,8 +57,8 @@ class App:
     def display_all_books(self):
         try:
             # Создаем новую таблицу с нужными столбцами
-            self.tree = ttk.Treeview(self.root, columns=('ID', 'Title', 'Author', 'File Ext', 'File Path', 'File Size', 'Num Pages', 'Metadata'), show='headings')
-            self.tree.heading('ID', text='ID')
+            self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Author', 'File Ext', 'File Path', 'File Size', 'Num Pages', 'Metadata'), show='headings')
+            self.tree.heading('Favorite', text='Избранное')
             self.tree.heading('Title', text='Название')
             self.tree.heading('Author', text='Автор')
             self.tree.heading('File Ext', text='Расширение файла')
@@ -68,6 +68,18 @@ class App:
             self.tree.heading('Metadata', text='Метаданные')
             self.tree.grid(row=1, column=0, columnspan=8, sticky="nsew")
 
+            def change_favorite(event):
+                item = self.tree.selection()[0]
+                is_favorite = self.tree.item(item, "values")[0]
+                file_path = self.tree.item(item, "values")[4]
+                # Обновление значения в столбце "Избранное"
+                if is_favorite == 'Да':
+                    self.tree.set(item, '#1', 'Нет')
+                    self.analyzer.update_book_favorite_status(file_path) 
+                else:
+                    self.tree.set(item, '#1', 'Да')
+                    self.analyzer.update_book_favorite_status(file_path) 
+
             def open_file(event):
                 item = self.tree.identify('item', event.x, event.y)
                 file_path = self.tree.item(item, "values")[4]  # предполагается, что путь к файлу хранится в 5-м столбце
@@ -76,10 +88,10 @@ class App:
             def show_preview(event):
                 try:
                     item = self.tree.identify('item', event.x, event.y)
-                    book_id = self.tree.item(item, "values")[0]  # предполагается, что ID книги хранится в первом столбце
+                    file_path = self.tree.item(item, "values")[4]  # Путь к файлу хранится в 5 столбце
 
                     # Получаем данные предварительного просмотра из базы данных
-                    preview_bytes = self.analyzer.get_book_preview(book_id)
+                    preview_bytes = self.analyzer.get_book_preview_path(file_path)
 
                     if preview_bytes:
                         # Преобразуем данные предварительного просмотра в изображение
@@ -99,6 +111,7 @@ class App:
 
             self.tree.bind('<Double-1>', open_file)
             self.tree.bind('<Double-3>', show_preview)  # Правый клик для предварительного просмотра
+            self.tree.bind("<Control-f>", change_favorite) # ctrl + f
 
             books = self.analyzer.get_all_books()
 
@@ -193,6 +206,35 @@ class App:
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
+    def change_favorite(self, tree):
+        def change_favorite(event):
+            item = tree.selection()[0]
+            is_favorite = tree.item(item, "values")[0]
+            file_path = tree.item(item, "values")[-1]
+            # Обновление значения в столбце "Избранное"
+            if is_favorite == 'Да':
+                self.tree.set(item, '#1', 'Нет')
+                self.analyzer.update_book_favorite_status(file_path) 
+            else:
+                self.tree.set(item, '#1', 'Да')
+                self.analyzer.update_book_favorite_status(file_path) 
+        tree.bind("<Control-f>", change_favorite) # ctrl + f
+
+    #когда сначала ранг, а потом избранное
+    def change_favorite2(self, tree):
+        def change_favorite(event):
+            item = tree.selection()[0]
+            is_favorite = tree.item(item, "values")[1]
+            file_path = tree.item(item, "values")[-1]
+            # Обновление значения в столбце "Избранное"
+            if is_favorite == 'Да':
+                self.tree.set(item, '#2', 'Нет')
+                self.analyzer.update_book_favorite_status(file_path) 
+            else:
+                self.tree.set(item, '#2', 'Да')
+                self.analyzer.update_book_favorite_status(file_path) 
+        tree.bind("<Control-f>", change_favorite) # ctrl + f
+
     def open_file(self, tree):
         def op_file(event):
             item = tree.identify('item', event.x, event.y)
@@ -225,17 +267,21 @@ class App:
 
         tree.bind('<Double-3>', open_file) # реагирует на ПКМ
 
+    # Поиск книг по названию
     def search_books_by_title(self):
         try:
-            self.tree = ttk.Treeview(self.root, columns=('Title', 'Author', 'Num Pages', 'Path'), show='headings')
+            self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Author', 'Num Pages', 'Path'), show='headings')
+            self.tree.column('Favorite', width=30)
+            self.tree.heading('Favorite', text='Избранное')
             self.tree.heading('Title', text='Название')
             self.tree.heading('Author', text='Автор')
             self.tree.heading('Num Pages', text='Кол-во страниц')
             self.tree.heading('Path', text='Путь к файлу')
-            self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
+            self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
+            self.change_favorite(self.tree)
 
             title = simpledialog.askstring("Ввод", "Введите название книги:")
             books = self.analyzer.search_books_by_title(title)
@@ -250,17 +296,21 @@ class App:
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
+    # Поиск книг по автору
     def search_books_by_author(self):
         try:
-            self.tree = ttk.Treeview(self.root, columns=('Title', 'Author', 'Num Pages', 'Path'), show='headings')
+            self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Author', 'Num Pages', 'Path'), show='headings')
+            self.tree.column('Favorite', width=30)
+            self.tree.heading('Favorite', text='Избранное')
             self.tree.heading('Title', text='Название')
             self.tree.heading('Author', text='Автор')
             self.tree.heading('Num Pages', text='Кол-во страниц')
             self.tree.heading('Path', text='Путь к файлу')
-            self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
+            self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
+            self.change_favorite(self.tree)
 
             author = simpledialog.askstring("Ввод", "Введите имя автора:")
             books = self.analyzer.search_books_by_author(author)
@@ -275,17 +325,21 @@ class App:
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
+    # Поиск книг по расширению файла
     def search_books_by_extension(self):
         try:
-            self.tree = ttk.Treeview(self.root, columns=('Title', 'Author', 'Extension', 'Path'), show='headings')
+            self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Author', 'Extension', 'Path'), show='headings')
+            self.tree.column('Favorite', width=30)
+            self.tree.heading('Favorite', text='Избранное')
             self.tree.heading('Title', text='Название')
             self.tree.heading('Author', text='Автор')
             self.tree.heading('Extension', text='Расширение')
             self.tree.heading('Path', text='Путь к файлу')
-            self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
+            self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
+            self.change_favorite(self.tree)
 
             extension = simpledialog.askstring("Ввод", "Введите расширение файла:")
             books = self.analyzer.search_books_by_extension(extension)
@@ -299,20 +353,24 @@ class App:
                 self.tree.insert('', 'end', values=book)
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
-    
+
+    # Показать книги с наибольшим размером
     def display_largest_books(self):
         try:
-            self.tree = ttk.Treeview(self.root, columns=('Rank', 'Title', 'Author', 'Size', 'Path'), show='headings')
+            self.tree = ttk.Treeview(self.root, columns=('Rank', 'Favorite', 'Title', 'Author', 'Size', 'Path'), show='headings')
+            self.tree.column('Favorite', width=30)
+            self.tree.heading('Favorite', text='Избранное')
             self.tree.column('Rank', width=30)  # Здесь мы задаём ширину столбца 'Rank'
             self.tree.heading('Rank', text='Ранг')
             self.tree.heading('Title', text='Название')
             self.tree.heading('Author', text='Автор')
             self.tree.heading('Size', text='Размер')
             self.tree.heading('Path', text='Путь к файлу')
-            self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
+            self.tree.grid(row=1, column=0, columnspan=6, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
+            self.change_favorite2(self.tree)
 
             dialog = tk.Toplevel(self.root)
             dialog.title("Выбор файлов")
@@ -348,19 +406,23 @@ class App:
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
+    # Показать книги с наибольшим количеством страниц
     def display_books_with_most_pages(self):
         try:
-            self.tree = ttk.Treeview(self.root, columns=('Rank', 'Title', 'Author', 'Num Pages', 'Path'), show='headings')
+            self.tree = ttk.Treeview(self.root, columns=('Rank', 'Favorite', 'Title', 'Author', 'Num Pages', 'Path'), show='headings')
+            self.tree.column('Favorite', width=30)
+            self.tree.heading('Favorite', text='Избранное')
             self.tree.column('Rank', width=50)  # Задаем ширину столбца 'Rank'
             self.tree.heading('Rank', text='Ранг')
             self.tree.heading('Title', text='Название')
             self.tree.heading('Author', text='Автор')
             self.tree.heading('Num Pages', text='Кол-во страниц')
             self.tree.heading('Path', text='Путь к файлу')
-            self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
+            self.tree.grid(row=1, column=0, columnspan=6, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
+            self.change_favorite2(self.tree)
 
             dialog = tk.Toplevel(self.root)
             dialog.title("Выбор файлов")
@@ -396,18 +458,22 @@ class App:
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
+    # Показать недавно добавленные книги
     def display_recently_added_books(self):
         try:
-            self.tree = ttk.Treeview(self.root, columns=('Rank', 'Title', 'Author', 'Path'), show='headings')
+            self.tree = ttk.Treeview(self.root, columns=('Rank', 'Favorite', 'Title', 'Author', 'Path'), show='headings')
+            self.tree.column('Favorite', width=30)
+            self.tree.heading('Favorite', text='Избранное')
             self.tree.column('Rank', width=50)  # Задаем ширину столбца 'Rank'
             self.tree.heading('Rank', text='Ранг')
             self.tree.heading('Title', text='Название')
             self.tree.heading('Author', text='Автор')
             self.tree.heading('Path', text='Путь к файлу')
-            self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
+            self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
+            self.change_favorite2(self.tree)
 
             dialog = tk.Toplevel(self.root)
             dialog.title("Выбор файлов")
@@ -447,14 +513,17 @@ class App:
     # Создаем новую функцию для отображения книг без автора
     def display_books_without_author(self):
         try:
-            self.tree = ttk.Treeview(self.root, columns=('Title', 'Num Pages', 'Path'), show='headings')
+            self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Num Pages', 'Path'), show='headings')
+            self.tree.column('Favorite', width=30)
+            self.tree.heading('Favorite', text='Избранное')
             self.tree.heading('Title', text='Название')
             self.tree.heading('Num Pages', text='Кол-во страниц')
             self.tree.heading('Path', text='Путь к файлу')
-            self.tree.grid(row=1, column=0, columnspan=3, sticky="nsew")
+            self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
+            self.change_favorite(self.tree)
 
             books = self.analyzer.get_books_without_author()
 
@@ -472,15 +541,18 @@ class App:
     # Создаем новую функцию для отображения книг без метаданных
     def display_books_without_metadata(self):
         try:
-            self.tree = ttk.Treeview(self.root, columns=('Title', 'File Ext', 'File Size', 'Path'), show='headings')
+            self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'File Ext', 'File Size', 'Path'), show='headings')
+            self.tree.column('Favorite', width=30)
+            self.tree.heading('Favorite', text='Избранное')
             self.tree.heading('Title', text='Название')
             self.tree.heading('File Ext', text='Расширение файла')
             self.tree.heading('File Size', text='Размер файла')
             self.tree.heading('Path', text='Путь к файлу')
-            self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
+            self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
+            self.change_favorite(self.tree)
 
             books = self.analyzer.get_books_without_metadata()
 
@@ -502,7 +574,7 @@ class App:
             data = {ext: count for ext, count in data_list}
             total_files = sum(data.values())
             labels = [f"{ext}: {round((count/total_files)*100, 2)}%" for ext, count in data.items()]
-            sizes = list(data.values())
+            sizes = list(data.values()) #создание списка размеров для каждого сектора диаграммы
 
             fig, ax = plt.subplots()
             wedges, texts, autotexts = ax.pie(sizes, autopct='', pctdistance=1.1)
@@ -512,7 +584,7 @@ class App:
                     bbox=bbox_props, zorder=0, va="center")
 
             for i, p in enumerate(wedges):
-                ang = (p.theta2 - p.theta1)/2. + p.theta1
+                ang = (p.theta2 - p.theta1)/2. + p.theta1 #вычисление угла середины каждого сектора
                 y = np.sin(np.deg2rad(ang))
                 x = np.cos(np.deg2rad(ang))
                 horizontalalignment = {-1: "right", 1: "left"}[int(np.sign(x))]

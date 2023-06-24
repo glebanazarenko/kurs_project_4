@@ -30,6 +30,14 @@ import aspose.words as aw
 from jinja2 import Environment, FileSystemLoader
 import base64
 
+def yes_no_indicator(value):
+    if value == 0:
+        return "Нет"
+    elif value == 1:
+        return "Да"
+    else:
+        return "Недопустимое значение"
+
 def pretty_size(size_bytes: int) -> str:
     """
     Конвертирует размер файла в формат, понятный человеку.\n
@@ -60,6 +68,7 @@ class BookAnalyzer:
         return self.conn.cursor()
     
     def close_db(self):
+        self.conn.commit()
         self.conn.close()
 
     def init_database(self):
@@ -87,7 +96,8 @@ class BookAnalyzer:
                 file_size INTEGER,
                 num_pages INTEGER,
                 preview BLOB,
-                metadata TEXT
+                metadata TEXT,
+                favorite INTEGER
             )
         ''')
 
@@ -187,20 +197,20 @@ class BookAnalyzer:
                 # Выполняем запрос к базе данных
 
                 # Подготавливаем данные для вставки
-                data = (file_path, title, author, file_size, str(metadata), num_pages, preview, file_ext)
+                data = (file_path, title, author, file_size, str(metadata), num_pages, preview, file_ext, 0)
 
                 cursor.execute("""
-                    INSERT OR REPLACE INTO books (file_path, title, author, file_size, metadata, num_pages, preview, file_ext)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO books (file_path, title, author, file_size, metadata, num_pages, preview, file_ext, favorite)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, data)
             else:
                 # Если книга уже есть в БД, обновляем ее
 
                 # Подготавливаем данные для вставки
-                data = (title, author, file_size, str(metadata), num_pages, preview, file_ext, file_path)
+                data = (title, author, file_size, str(metadata), num_pages, preview, file_ext, 0, file_path)
 
                 cursor.execute('''
-                    UPDATE books SET title = ?, author = ?, file_size = ?, metadata = ?, num_pages = ?, preview = ?, file_ext = ?
+                    UPDATE books SET title = ?, author = ?, file_size = ?, metadata = ?, num_pages = ?, preview = ?, file_ext = ?, favorite = ?
                     WHERE file_path = ?
                 ''', data)
         except Exception as e:
@@ -414,9 +424,40 @@ class BookAnalyzer:
             print(f"Permission denied for directory: {directory}")
 
     # ЗАПРОСЫ К БД
+    def update_book_favorite_status(self, file_path):
+        try:
+            cursor = self.open_db()
+
+            # Получение текущего статуса избранного для книги
+            query = f"SELECT favorite FROM books WHERE file_path = '{file_path}'"
+
+            cursor.execute(query)
+            rows = cursor.fetchall()
+
+            if rows is None:
+                raise ValueError("Книга не найдена")
+
+            # Инвертирование статуса избранного
+            new_status = 0 if rows[0][0] == 1 else 1
+
+            # Подготавливаем данные для вставки
+            data = (new_status, file_path)
+            #data = (file_path,)
+
+            # Обновление статуса избранного в базе данных
+            cursor.execute('''
+                UPDATE books SET favorite = ?
+                WHERE file_path = ?
+            ''', data)
+
+            self.close_db()
+
+        except Exception as e:
+            print("Ошибка обновления статуса избранное у книги:", str(e))
+
     def get_all_books(self):
         cursor = self.open_db()
-        query = "SELECT id, title, author, file_ext, file_path, file_size, num_pages, metadata FROM books"
+        query = "SELECT favorite, title, author, file_ext, file_path, file_size, num_pages, metadata FROM books"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -424,7 +465,7 @@ class BookAnalyzer:
         self.close_db()
 
         # Преобразуем размер файла в человеко-читаемый формат
-        rows = [(id, title, author, file_ext, file_path, pretty_size(file_size), num_pages, metadata) for id, title, author, file_ext, file_path, file_size, num_pages, metadata in rows]
+        rows = [(yes_no_indicator(favorite), title, author, file_ext, file_path, pretty_size(file_size), num_pages, metadata) for favorite, title, author, file_ext, file_path, file_size, num_pages, metadata in rows]
 
         return rows
     
@@ -453,43 +494,43 @@ class BookAnalyzer:
     # Поиск книг по названию
     def search_books_by_title(self, title):
         cursor = self.open_db()
-        query = f"SELECT title, author, num_pages, file_path FROM books WHERE title LIKE '%{title}%'"
+        query = f"SELECT favorite, title, author, num_pages, file_path FROM books WHERE title LIKE '%{title}%'"
 
         cursor.execute(query)
         rows = cursor.fetchall()
 
         self.close_db()
 
-        return rows
-    
+        return [(yes_no_indicator(favorite), title, author, num_pages, file_path) for favorite, title, author, num_pages, file_path in rows]
+
     # Поиск книг по автору
     def search_books_by_author(self, author):
         cursor = self.open_db()
-        query = f"SELECT title, author, num_pages, file_path FROM books WHERE author LIKE '%{author}%'"
+        query = f"SELECT favorite, title, author, num_pages, file_path FROM books WHERE author LIKE '%{author}%'"
 
         cursor.execute(query)
         rows = cursor.fetchall()
 
         self.close_db()
 
-        return rows
-    
+        return [(yes_no_indicator(favorite), title, author, num_pages, file_path) for favorite, title, author, num_pages, file_path in rows]
+
     # Поиск книг по расширению файла
     def search_books_by_extension(self, file_ext):
         cursor = self.open_db()
-        query = f"SELECT title, author, file_ext, file_path FROM books WHERE file_ext LIKE '%{file_ext}%'"
+        query = f"SELECT favorite, title, author, file_ext, file_path FROM books WHERE file_ext LIKE '%{file_ext}%'"
 
         cursor.execute(query)
         rows = cursor.fetchall()
 
         self.close_db()
 
-        return rows
+        return [(yes_no_indicator(favorite), title, author, file_ext, file_path) for favorite, title, author, file_ext, file_path in rows]
 
     # Получить самые большие книги
     def get_largest_books(self, limit=5, offset=0):
         cursor = self.open_db()
-        query = f"SELECT title, author, file_size, file_path FROM books ORDER BY file_size DESC LIMIT {limit} OFFSET {offset}"
+        query = f"SELECT favorite, title, author, file_size, file_path FROM books ORDER BY file_size DESC LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -497,50 +538,48 @@ class BookAnalyzer:
         self.close_db()
 
         # Преобразуем размер файла в человеко-читаемый формат
-        rows = [(title, author, pretty_size(file_size), file_path) for title, author, file_size, file_path in rows]
+        return [(yes_no_indicator(favorite), title, author, pretty_size(file_size), file_path) for favorite, title, author, file_size, file_path in rows]
 
-        return rows
-    
     # Получить книги с наибольшим количеством страниц
     def get_books_with_most_pages(self, limit=5, offset=0): 
         cursor = self.open_db()
-        query = f"SELECT title, author, num_pages, file_path FROM books ORDER BY num_pages DESC LIMIT {limit} OFFSET {offset}"
+        query = f"SELECT favorite, title, author, num_pages, file_path FROM books ORDER BY num_pages DESC LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()
 
         self.close_db()
 
-        return rows
+        return [(yes_no_indicator(favorite), title, author, num_pages, file_path) for favorite, title, author, num_pages, file_path in rows]
 
     # Получить книги, добавленные последними
     def get_recently_added_books(self, limit=5, offset=0):
         cursor = self.open_db()
-        query = f"SELECT title, author, file_path FROM books ORDER BY id DESC LIMIT {limit} OFFSET {offset}"
+        query = f"SELECT favorite, title, author, file_path FROM books ORDER BY id DESC LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()
 
         self.close_db()
 
-        return rows
+        return [(yes_no_indicator(favorite), title, author, file_path) for favorite, title, author, file_path in rows]
 
     # Получить книги без автора
     def get_books_without_author(self):
         cursor = self.open_db()
-        query = f"SELECT title, num_pages, file_path FROM books WHERE author IS NULL"
+        query = f"SELECT favorite, title, num_pages, file_path FROM books WHERE author IS NULL"
 
         cursor.execute(query)
         rows = cursor.fetchall()
 
         self.close_db()
 
-        return rows
+        return [(yes_no_indicator(favorite), title, num_pages, file_path) for favorite, title, num_pages, file_path in rows]
 
     # Получить книги без метаданных
     def get_books_without_metadata(self):
         cursor = self.open_db()
-        query = f"SELECT title, file_ext, file_size, file_path FROM books WHERE metadata like 'None'"
+        query = f"SELECT favorite, title, file_ext, file_size, file_path FROM books WHERE metadata like 'None'"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -548,9 +587,7 @@ class BookAnalyzer:
         self.close_db()
 
         # Преобразуем размер файла в человеко-читаемый формат
-        rows = [(title, author, pretty_size(file_size), file_path) for title, author, file_size, file_path in rows]
-
-        return rows
+        return [(yes_no_indicator(favorite), title, file_ext, pretty_size(file_size), file_path) for favorite, title, file_ext, file_size, file_path in rows]
 
     # Получить статистику по расширениям файлов
     def get_file_extension_statistics(self):
