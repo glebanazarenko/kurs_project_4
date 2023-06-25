@@ -23,6 +23,13 @@ class App:
         self.text_widget.grid(row=1, column=0, columnspan=4, sticky="nsew")
         self.text_widget.configure(state='disabled')  # делаем текстовое поле read-only
 
+        self.favorites_var = tk.IntVar()
+        self.last_method = self.display_all_books
+        self.last_args = dict(only_favorites=False)
+
+        self.favorites_checkbox = tk.Checkbutton(self.root, text="Показать только избранные", variable=self.favorites_var, command=self.update_table)
+        self.favorites_checkbox.grid(row=0, column=3)
+
         self.display_button = tk.Button(self.root, text="Показать все книги", command=self.display_all_books)
         self.display_button.grid(row=0, column=0)
 
@@ -53,6 +60,13 @@ class App:
         # Задаём растягиваемость строк и столбцов
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=1)  # Изменим номер строки для растягиваемости, т.к. текстовое поле теперь во второй строке (нумерация с 0)
+
+        # Показываем все книги при старте приложения
+        self.display_all_books()
+
+    def update_table(self):
+        # Обновляем таблицу с учетом текущего значения чекбокса
+        self.last_method(**self.last_args)
 
     def display_all_books(self):
         try:
@@ -113,7 +127,9 @@ class App:
             self.tree.bind('<Double-3>', show_preview)  # Правый клик для предварительного просмотра
             self.tree.bind("<Control-f>", change_favorite) # ctrl + f
 
-            books = self.analyzer.get_all_books()
+            only_favorites = self.favorites_var.get() == 1
+
+            books = self.analyzer.get_all_books(only_favorites)
 
             # Очищаем таблицу
             for i in self.tree.get_children():
@@ -122,6 +138,9 @@ class App:
             # Вставляем новые данные
             for book in books:
                 self.tree.insert('', 'end', values=book)
+
+            self.last_method = self.display_all_books
+            self.last_args = dict()
 
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
@@ -268,7 +287,7 @@ class App:
         tree.bind('<Double-3>', open_file) # реагирует на ПКМ
 
     # Поиск книг по названию
-    def search_books_by_title(self):
+    def search_books_by_title(self, title=None):
         try:
             self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Author', 'Num Pages', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
@@ -283,8 +302,13 @@ class App:
             self.bind_preview(self.tree)
             self.change_favorite(self.tree)
 
-            title = simpledialog.askstring("Ввод", "Введите название книги:")
-            books = self.analyzer.search_books_by_title(title)
+            if title is None and self.last_method == self.search_books_by_title:
+                title = self.last_args.get('title')
+            elif title is None:
+                title = simpledialog.askstring("Ввод", "Введите название книги:")
+
+            only_favorites = self.favorites_var.get() == 1
+            books = self.analyzer.search_books_by_title(title, only_favorites)
 
             # Очищаем таблицу
             for i in self.tree.get_children():
@@ -293,11 +317,15 @@ class App:
             # Вставляем новые данные
             for book in books:
                 self.tree.insert('', 'end', values=book)
+
+            # обновляем последний вызванный метод и его аргументы
+            self.last_method = self.search_books_by_title
+            self.last_args = dict(title=title)
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
     # Поиск книг по автору
-    def search_books_by_author(self):
+    def search_books_by_author(self, author=None):
         try:
             self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Author', 'Num Pages', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
@@ -312,8 +340,13 @@ class App:
             self.bind_preview(self.tree)
             self.change_favorite(self.tree)
 
-            author = simpledialog.askstring("Ввод", "Введите имя автора:")
-            books = self.analyzer.search_books_by_author(author)
+            if author is None and self.last_method == self.search_books_by_author:
+                author = self.last_args.get('author')
+            elif author is None:
+                author = simpledialog.askstring("Ввод", "Введите имя автора:")
+
+            only_favorites = self.favorites_var.get() == 1
+            books = self.analyzer.search_books_by_author(author, only_favorites)
 
             # Очищаем таблицу
             for i in self.tree.get_children():
@@ -322,11 +355,15 @@ class App:
             # Вставляем новые данные
             for book in books:
                 self.tree.insert('', 'end', values=book)
+
+            # обновляем последний вызванный метод и его аргументы
+            self.last_method = self.search_books_by_author
+            self.last_args = dict(author=author)
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
     # Поиск книг по расширению файла
-    def search_books_by_extension(self):
+    def search_books_by_extension(self, extension=None):
         try:
             self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Author', 'Extension', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
@@ -341,8 +378,13 @@ class App:
             self.bind_preview(self.tree)
             self.change_favorite(self.tree)
 
-            extension = simpledialog.askstring("Ввод", "Введите расширение файла:")
-            books = self.analyzer.search_books_by_extension(extension)
+            if extension is None and self.last_method == self.search_books_by_extension:
+                extension = self.last_args.get('extension')
+            elif extension is None:
+                extension = simpledialog.askstring("Ввод", "Введите расширение файла:")
+
+            only_favorites = self.favorites_var.get() == 1
+            books = self.analyzer.search_books_by_extension(extension, only_favorites)
 
             # Очищаем таблицу
             for i in self.tree.get_children():
@@ -351,11 +393,15 @@ class App:
             # Вставляем новые данные
             for book in books:
                 self.tree.insert('', 'end', values=book)
+
+            # обновляем последний вызванный метод и его аргументы
+            self.last_method = self.search_books_by_extension
+            self.last_args = dict(extension=extension)
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
     # Показать книги с наибольшим размером
-    def display_largest_books(self):
+    def display_largest_books(self, limit=None, offset=None):
         try:
             self.tree = ttk.Treeview(self.root, columns=('Rank', 'Favorite', 'Title', 'Author', 'Size', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
@@ -372,42 +418,53 @@ class App:
             self.bind_preview(self.tree)
             self.change_favorite2(self.tree)
 
-            dialog = tk.Toplevel(self.root)
-            dialog.title("Выбор файлов")
+            if limit is None and offset is None and self.last_method == self.display_largest_books:
+                limit = self.last_args.get('limit')
+                offset = self.last_args.get('offset')
+            elif limit is None and offset is None:
+                dialog = tk.Toplevel(self.root)
+                dialog.title("Выбор файлов")
 
-            limit_label = tk.Label(dialog, text="Введите сколько файлов хотите выбрать")
-            limit_label.pack()
-            limit_entry = tk.Entry(dialog)
-            limit_entry.pack()
+                limit_label = tk.Label(dialog, text="Введите сколько файлов хотите выбрать")
+                limit_label.pack()
+                limit_entry = tk.Entry(dialog)
+                limit_entry.pack()
 
-            offset_label = tk.Label(dialog, text="Начать с ? (начинается с 1)")
-            offset_label.pack()
-            offset_entry = tk.Entry(dialog)
-            offset_entry.pack()
+                offset_label = tk.Label(dialog, text="Начать с ? (начинается с 1)")
+                offset_label.pack()
+                offset_entry = tk.Entry(dialog)
+                offset_entry.pack()
 
-            def on_submit():
-                limit = int(limit_entry.get())
-                offset = int(offset_entry.get()) - 1
-                books = self.analyzer.get_largest_books(limit, offset)
+                def on_submit():
+                    nonlocal limit
+                    nonlocal offset
+                    limit = int(limit_entry.get())
+                    offset = int(offset_entry.get()) - 1
+                    dialog.destroy()
 
-                # Очищаем таблицу
-                for i in self.tree.get_children():
-                    self.tree.delete(i)
+                submit_button = tk.Button(dialog, text="Подтвердить", command=on_submit)
+                submit_button.pack()
+                self.root.wait_window(dialog)
 
-                # Вставляем новые данные
-                for i, book in enumerate(books, start=1 + offset):
-                    self.tree.insert('', 'end', values=(i, *book))
+            only_favorites = self.favorites_var.get() == 1
+            books = self.analyzer.get_largest_books(limit, offset, only_favorites)
 
-                dialog.destroy()
+            # Очищаем таблицу
+            for i in self.tree.get_children():
+                self.tree.delete(i)
 
-            submit_button = tk.Button(dialog, text="Подтвердить", command=on_submit)
-            submit_button.pack()
+            # Вставляем новые данные
+            for i, book in enumerate(books, start=1 + offset):
+                self.tree.insert('', 'end', values=(i, *book))
 
+            # обновляем последний вызванный метод и его аргументы
+            self.last_method = self.display_largest_books
+            self.last_args = dict(limit=limit, offset=offset)
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
     # Показать книги с наибольшим количеством страниц
-    def display_books_with_most_pages(self):
+    def display_books_with_most_pages(self, limit=None, offset=None):
         try:
             self.tree = ttk.Treeview(self.root, columns=('Rank', 'Favorite', 'Title', 'Author', 'Num Pages', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
@@ -424,42 +481,53 @@ class App:
             self.bind_preview(self.tree)
             self.change_favorite2(self.tree)
 
-            dialog = tk.Toplevel(self.root)
-            dialog.title("Выбор файлов")
+            if limit is None and offset is None and self.last_method == self.display_books_with_most_pages:
+                limit = self.last_args.get('limit')
+                offset = self.last_args.get('offset')
+            elif limit is None and offset is None:
+                dialog = tk.Toplevel(self.root)
+                dialog.title("Выбор файлов")
 
-            limit_label = tk.Label(dialog, text="Введите сколько файлов хотите выбрать")
-            limit_label.pack()
-            limit_entry = tk.Entry(dialog)
-            limit_entry.pack()
+                limit_label = tk.Label(dialog, text="Введите сколько файлов хотите выбрать")
+                limit_label.pack()
+                limit_entry = tk.Entry(dialog)
+                limit_entry.pack()
 
-            offset_label = tk.Label(dialog, text="Начать с ? (начинается с 1)")
-            offset_label.pack()
-            offset_entry = tk.Entry(dialog)
-            offset_entry.pack()
+                offset_label = tk.Label(dialog, text="Начать с ? (начинается с 1)")
+                offset_label.pack()
+                offset_entry = tk.Entry(dialog)
+                offset_entry.pack()
 
-            def on_submit():
-                limit = int(limit_entry.get())
-                offset = int(offset_entry.get()) - 1
-                books = self.analyzer.get_books_with_most_pages(limit, offset)
+                def on_submit():
+                    nonlocal limit
+                    nonlocal offset
+                    limit = int(limit_entry.get())
+                    offset = int(offset_entry.get()) - 1
+                    dialog.destroy()
 
-                # Очищаем таблицу
-                for i in self.tree.get_children():
-                    self.tree.delete(i)
+                submit_button = tk.Button(dialog, text="Подтвердить", command=on_submit)
+                submit_button.pack()
+                self.root.wait_window(dialog)
 
-                # Вставляем новые данные
-                for i, book in enumerate(books, start=1 + offset):
-                    self.tree.insert('', 'end', values=(i, *book))
+            only_favorites = self.favorites_var.get() == 1
+            books = self.analyzer.get_books_with_most_pages(limit, offset, only_favorites)
 
-                dialog.destroy()
+            # Очищаем таблицу
+            for i in self.tree.get_children():
+                self.tree.delete(i)
 
-            submit_button = tk.Button(dialog, text="Подтвердить", command=on_submit)
-            submit_button.pack()
+            # Вставляем новые данные
+            for i, book in enumerate(books, start=1 + offset):
+                self.tree.insert('', 'end', values=(i, *book))
 
+            # обновляем последний вызванный метод и его аргументы
+            self.last_method = self.display_books_with_most_pages
+            self.last_args = dict(limit=limit, offset=offset)
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
     # Показать недавно добавленные книги
-    def display_recently_added_books(self):
+    def display_recently_added_books(self, limit=None, offset=None):
         try:
             self.tree = ttk.Treeview(self.root, columns=('Rank', 'Favorite', 'Title', 'Author', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
@@ -475,42 +543,53 @@ class App:
             self.bind_preview(self.tree)
             self.change_favorite2(self.tree)
 
-            dialog = tk.Toplevel(self.root)
-            dialog.title("Выбор файлов")
+            if limit is None and offset is None and self.last_method == self.display_recently_added_books:
+                limit = self.last_args.get('limit')
+                offset = self.last_args.get('offset')
+            elif limit is None and offset is None:
+                dialog = tk.Toplevel(self.root)
+                dialog.title("Выбор файлов")
 
-            limit_label = tk.Label(dialog, text="Введите сколько файлов хотите выбрать")
-            limit_label.pack()
-            limit_entry = tk.Entry(dialog)
-            limit_entry.pack()
+                limit_label = tk.Label(dialog, text="Введите сколько файлов хотите выбрать")
+                limit_label.pack()
+                limit_entry = tk.Entry(dialog)
+                limit_entry.pack()
 
-            offset_label = tk.Label(dialog, text="Начать с ? (начинается с 1)")
-            offset_label.pack()
-            offset_entry = tk.Entry(dialog)
-            offset_entry.pack()
+                offset_label = tk.Label(dialog, text="Начать с ? (начинается с 1)")
+                offset_label.pack()
+                offset_entry = tk.Entry(dialog)
+                offset_entry.pack()
 
-            def on_submit():
-                limit = int(limit_entry.get())
-                offset = int(offset_entry.get()) - 1
-                books = self.analyzer.get_recently_added_books(limit, offset)
+                def on_submit():
+                    nonlocal limit
+                    nonlocal offset
+                    limit = int(limit_entry.get())
+                    offset = int(offset_entry.get()) - 1
+                    dialog.destroy()
 
-                # Очищаем таблицу
-                for i in self.tree.get_children():
-                    self.tree.delete(i)
+                submit_button = tk.Button(dialog, text="Подтвердить", command=on_submit)
+                submit_button.pack()
+                self.root.wait_window(dialog)
 
-                # Вставляем новые данные
-                for i, book in enumerate(books, start=1 + offset):
-                    self.tree.insert('', 'end', values=(i, *book))
+            only_favorites = self.favorites_var.get() == 1
+            books = self.analyzer.get_recently_added_books(limit, offset, only_favorites)
 
-                dialog.destroy()
+            # Очищаем таблицу
+            for i in self.tree.get_children():
+                self.tree.delete(i)
 
-            submit_button = tk.Button(dialog, text="Подтвердить", command=on_submit)
-            submit_button.pack()
+            # Вставляем новые данные
+            for i, book in enumerate(books, start=1 + offset):
+                self.tree.insert('', 'end', values=(i, *book))
 
+            # обновляем последний вызванный метод и его аргументы
+            self.last_method = self.display_recently_added_books
+            self.last_args = dict(limit=limit, offset=offset)
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
 
-    # Создаем новую функцию для отображения книг без автора
+    # Отображаем книги без автора
     def display_books_without_author(self):
         try:
             self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Num Pages', 'Path'), show='headings')
@@ -525,7 +604,9 @@ class App:
             self.bind_preview(self.tree)
             self.change_favorite(self.tree)
 
-            books = self.analyzer.get_books_without_author()
+            
+            only_favorites = self.favorites_var.get() == 1
+            books = self.analyzer.get_books_without_author(only_favorites)
 
             # Очищаем таблицу
             for i in self.tree.get_children():
@@ -535,10 +616,14 @@ class App:
             for book in books:
                 self.tree.insert('', 'end', values=book)
 
+            # обновляем последний вызванный метод и его аргументы
+            self.last_method = self.display_books_without_author
+            self.last_args = dict()
+
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
-    # Создаем новую функцию для отображения книг без метаданных
+    # Отображаем книги без метаданных
     def display_books_without_metadata(self):
         try:
             self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'File Ext', 'File Size', 'Path'), show='headings')
@@ -554,7 +639,8 @@ class App:
             self.bind_preview(self.tree)
             self.change_favorite(self.tree)
 
-            books = self.analyzer.get_books_without_metadata()
+            only_favorites = self.favorites_var.get() == 1
+            books = self.analyzer.get_books_without_metadata(only_favorites)
 
             # Очищаем таблицу
             for i in self.tree.get_children():
@@ -563,6 +649,10 @@ class App:
             # Вставляем новые данные
             for book in books:
                 self.tree.insert('', 'end', values=book)
+
+            # обновляем последний вызванный метод и его аргументы
+            self.last_method = self.display_books_without_metadata
+            self.last_args = dict()
 
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))

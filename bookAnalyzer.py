@@ -455,9 +455,12 @@ class BookAnalyzer:
         except Exception as e:
             print("Ошибка обновления статуса избранное у книги:", str(e))
 
-    def get_all_books(self):
+    def get_all_books(self, only_favorites=False):
         cursor = self.open_db()
         query = "SELECT favorite, title, author, file_ext, file_path, file_size, num_pages, metadata FROM books"
+
+        if only_favorites:
+            query += " WHERE favorite = 1"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -492,9 +495,12 @@ class BookAnalyzer:
         return row[0] if row else None
 
     # Поиск книг по названию
-    def search_books_by_title(self, title):
+    def search_books_by_title(self, title, only_favorites=False):
         cursor = self.open_db()
         query = f"SELECT favorite, title, author, num_pages, file_path FROM books WHERE title LIKE '%{title}%'"
+
+        if only_favorites:
+            query += " AND favorite = 1"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -504,9 +510,12 @@ class BookAnalyzer:
         return [(yes_no_indicator(favorite), title, author, num_pages, file_path) for favorite, title, author, num_pages, file_path in rows]
 
     # Поиск книг по автору
-    def search_books_by_author(self, author):
+    def search_books_by_author(self, author, only_favorites=False):
         cursor = self.open_db()
         query = f"SELECT favorite, title, author, num_pages, file_path FROM books WHERE author LIKE '%{author}%'"
+
+        if only_favorites:
+            query += " AND favorite = 1"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -516,9 +525,12 @@ class BookAnalyzer:
         return [(yes_no_indicator(favorite), title, author, num_pages, file_path) for favorite, title, author, num_pages, file_path in rows]
 
     # Поиск книг по расширению файла
-    def search_books_by_extension(self, file_ext):
+    def search_books_by_extension(self, file_ext, only_favorites=False):
         cursor = self.open_db()
         query = f"SELECT favorite, title, author, file_ext, file_path FROM books WHERE file_ext LIKE '%{file_ext}%'"
+
+        if only_favorites:
+            query += " AND favorite = 1"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -528,9 +540,12 @@ class BookAnalyzer:
         return [(yes_no_indicator(favorite), title, author, file_ext, file_path) for favorite, title, author, file_ext, file_path in rows]
 
     # Получить самые большие книги
-    def get_largest_books(self, limit=5, offset=0):
+    def get_largest_books(self, limit=5, offset=0, only_favorites=False):
         cursor = self.open_db()
         query = f"SELECT favorite, title, author, file_size, file_path FROM books ORDER BY file_size DESC LIMIT {limit} OFFSET {offset}"
+
+        if only_favorites:
+            query = f"SELECT favorite, title, author, file_size, file_path FROM books WHERE favorite = 1 ORDER BY file_size DESC LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -541,9 +556,12 @@ class BookAnalyzer:
         return [(yes_no_indicator(favorite), title, author, pretty_size(file_size), file_path) for favorite, title, author, file_size, file_path in rows]
 
     # Получить книги с наибольшим количеством страниц
-    def get_books_with_most_pages(self, limit=5, offset=0): 
+    def get_books_with_most_pages(self, limit=5, offset=0, only_favorites=False): 
         cursor = self.open_db()
         query = f"SELECT favorite, title, author, num_pages, file_path FROM books ORDER BY num_pages DESC LIMIT {limit} OFFSET {offset}"
+
+        if only_favorites:
+            query = f"SELECT favorite, title, author, num_pages, file_path FROM books WHERE favorite = 1 ORDER BY num_pages DESC LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -553,9 +571,12 @@ class BookAnalyzer:
         return [(yes_no_indicator(favorite), title, author, num_pages, file_path) for favorite, title, author, num_pages, file_path in rows]
 
     # Получить книги, добавленные последними
-    def get_recently_added_books(self, limit=5, offset=0):
+    def get_recently_added_books(self, limit=5, offset=0, only_favorites=False):
         cursor = self.open_db()
         query = f"SELECT favorite, title, author, file_path FROM books ORDER BY id DESC LIMIT {limit} OFFSET {offset}"
+
+        if only_favorites:
+            query = f"SELECT favorite, title, author, file_path FROM books WHERE favorite = 1 ORDER BY id DESC LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -565,9 +586,12 @@ class BookAnalyzer:
         return [(yes_no_indicator(favorite), title, author, file_path) for favorite, title, author, file_path in rows]
 
     # Получить книги без автора
-    def get_books_without_author(self):
+    def get_books_without_author(self, only_favorites=False):
         cursor = self.open_db()
         query = f"SELECT favorite, title, num_pages, file_path FROM books WHERE author IS NULL"
+
+        if only_favorites:
+            query += " AND favorite = 1"
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -577,9 +601,12 @@ class BookAnalyzer:
         return [(yes_no_indicator(favorite), title, num_pages, file_path) for favorite, title, num_pages, file_path in rows]
 
     # Получить книги без метаданных
-    def get_books_without_metadata(self):
+    def get_books_without_metadata(self, only_favorites=False):
         cursor = self.open_db()
         query = f"SELECT favorite, title, file_ext, file_size, file_path FROM books WHERE metadata like 'None'"
+
+        if only_favorites:
+            query += " AND favorite = 1"
 
         cursor.execute(query)
         rows = cursor.fetchall()
