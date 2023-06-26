@@ -455,12 +455,15 @@ class BookAnalyzer:
         except Exception as e:
             print("Ошибка обновления статуса избранное у книги:", str(e))
 
-    def get_all_books(self, only_favorites=False):
+    def get_all_books(self, only_favorites=False, limit=None, offset=None):
         cursor = self.open_db()
         query = "SELECT favorite, title, author, file_ext, file_path, file_size, num_pages, metadata FROM books"
 
         if only_favorites:
             query += " WHERE favorite = 1"
+
+        if limit is not None and offset is not None:
+            query += f" LIMIT {limit} OFFSET {offset}"
 
         cursor.execute(query)
         rows = cursor.fetchall()

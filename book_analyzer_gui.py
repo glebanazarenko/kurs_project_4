@@ -25,7 +25,7 @@ class App:
 
         self.favorites_var = tk.IntVar()
         self.last_method = self.display_all_books
-        self.last_args = dict(only_favorites=False)
+        self.last_args = dict(limit=30, offset=1)
 
         self.favorites_checkbox = tk.Checkbutton(self.root, text="Показать только избранные", variable=self.favorites_var, command=self.update_table)
         self.favorites_checkbox.grid(row=0, column=3)
@@ -68,18 +68,18 @@ class App:
         # Обновляем таблицу с учетом текущего значения чекбокса
         self.last_method(**self.last_args)
 
-    def display_all_books(self):
+    def display_all_books(self, limit=None, offset=None):
         try:
             # Создаем новую таблицу с нужными столбцами
             self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Author', 'File Ext', 'File Path', 'File Size', 'Num Pages', 'Metadata'), show='headings')
-            self.tree.heading('Favorite', text='Избранное')
-            self.tree.heading('Title', text='Название')
-            self.tree.heading('Author', text='Автор')
-            self.tree.heading('File Ext', text='Расширение файла')
-            self.tree.heading('File Path', text='Путь к файлу')
-            self.tree.heading('File Size', text='Размер файла')
-            self.tree.heading('Num Pages', text='Кол-во страниц')
-            self.tree.heading('Metadata', text='Метаданные')
+            self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
+            self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
+            self.tree.heading('Author', text='Автор', command=lambda: self.treeview_sort_column(self.tree, 'Author', False))
+            self.tree.heading('File Ext', text='Расширение файла', command=lambda: self.treeview_sort_column(self.tree, 'File Ext', False))
+            self.tree.heading('File Path', text='Путь к файлу', command=lambda: self.treeview_sort_column(self.tree, 'File Path', False))
+            self.tree.heading('File Size', text='Размер файла', command=lambda: self.treeview_sort_column(self.tree, 'File Size', False))
+            self.tree.heading('Num Pages', text='Кол-во страниц', command=lambda: self.treeview_sort_column(self.tree, 'Num Pages', False))
+            self.tree.heading('Metadata', text='Метаданные', command=lambda: self.treeview_sort_column(self.tree, 'Metadata', False))
             self.tree.grid(row=1, column=0, columnspan=8, sticky="nsew")
 
             def change_favorite(event):
@@ -123,13 +123,68 @@ class App:
                 except Exception as e:
                     messagebox.showerror("Ошибка", str(e))
 
+            def show_metadata(event):
+                try:
+                    item = self.tree.selection()[0]
+                    metadata_str = self.tree.item(item, "values")[7]  # Метаданные хранятся в 8-м столбце
+                    metadata = eval(metadata_str)  # Преобразуем строку метаданных в словарь
+
+                    dialog = tk.Toplevel(self.root)
+                    dialog.title("Метаданные книги")
+
+                    # Создаем новую таблицу с метаданными
+                    metadata_tree = ttk.Treeview(dialog, columns=('Key', 'Value'), show='headings')
+                    metadata_tree.heading('Key', text='Ключ')
+                    metadata_tree.heading('Value', text='Значение')
+                    metadata_tree.grid(row=0, column=0, sticky='nsew')
+
+                    # Конфигурируем ряды и столбцы для корректного изменения размера таблицы
+                    dialog.grid_rowconfigure(0, weight=1)
+                    dialog.grid_columnconfigure(0, weight=1)
+
+                    # Вставляем метаданные
+                    for key, value in metadata.items():
+                        metadata_tree.insert('', 'end', values=(key, value))
+
+                except Exception as e:
+                    messagebox.showerror("Ошибка", str(e))
+
             self.tree.bind('<Double-1>', open_file)
             self.tree.bind('<Double-3>', show_preview)  # Правый клик для предварительного просмотра
             self.tree.bind("<Control-f>", change_favorite) # ctrl + f
+            self.tree.bind("<Control-m>", show_metadata) # ctrl + m
 
             only_favorites = self.favorites_var.get() == 1
 
-            books = self.analyzer.get_all_books(only_favorites)
+            if limit is None and offset is None and self.last_method == self.display_all_books and only_favorites:
+                limit = self.last_args.get('limit')
+                offset = self.last_args.get('offset')
+            elif limit is None and offset is None:
+                dialog = tk.Toplevel(self.root)
+                dialog.title("Выбор файлов")
+
+                limit_label = tk.Label(dialog, text="Введите сколько файлов хотите выбрать")
+                limit_label.pack()
+                limit_entry = tk.Entry(dialog)
+                limit_entry.pack()
+
+                offset_label = tk.Label(dialog, text="Начать с ? (начинается с 1)")
+                offset_label.pack()
+                offset_entry = tk.Entry(dialog)
+                offset_entry.pack()
+
+                def on_submit():
+                    nonlocal limit
+                    nonlocal offset
+                    limit = int(limit_entry.get())
+                    offset = int(offset_entry.get()) - 1
+                    dialog.destroy()
+
+                submit_button = tk.Button(dialog, text="Подтвердить", command=on_submit)
+                submit_button.pack()
+                self.root.wait_window(dialog)
+
+            books = self.analyzer.get_all_books(only_favorites, limit, offset)
 
             # Очищаем таблицу
             for i in self.tree.get_children():
@@ -140,10 +195,22 @@ class App:
                 self.tree.insert('', 'end', values=book)
 
             self.last_method = self.display_all_books
-            self.last_args = dict()
+            self.last_args = dict(limit=limit, offset=offset)
 
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
+    
+    # Функция для сортировки столбцов
+    def treeview_sort_column(self, tv, col, reverse):
+        l = [(tv.set(k, col), k) for k in tv.get_children('')]
+        l.sort(reverse=reverse)
+
+        # Переставляем элементы в отсортированном порядке.
+        for index, (val, k) in enumerate(l):
+            tv.move(k, '', index)
+
+        # Перевернем направление сортировки для следующего щелчка.
+        tv.heading(col, command=lambda: self.treeview_sort_column(tv, col, not reverse))
 
     def process_directory(self):
         try:
@@ -291,9 +358,9 @@ class App:
         try:
             self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Author', 'Num Pages', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
-            self.tree.heading('Favorite', text='Избранное')
-            self.tree.heading('Title', text='Название')
-            self.tree.heading('Author', text='Автор')
+            self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
+            self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
+            self.tree.heading('Author', text='Автор', command=lambda: self.treeview_sort_column(self.tree, 'Author', False))
             self.tree.heading('Num Pages', text='Кол-во страниц')
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
@@ -329,9 +396,9 @@ class App:
         try:
             self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Author', 'Num Pages', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
-            self.tree.heading('Favorite', text='Избранное')
-            self.tree.heading('Title', text='Название')
-            self.tree.heading('Author', text='Автор')
+            self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
+            self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
+            self.tree.heading('Author', text='Автор', command=lambda: self.treeview_sort_column(self.tree, 'Author', False))
             self.tree.heading('Num Pages', text='Кол-во страниц')
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
@@ -367,10 +434,10 @@ class App:
         try:
             self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Author', 'Extension', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
-            self.tree.heading('Favorite', text='Избранное')
-            self.tree.heading('Title', text='Название')
-            self.tree.heading('Author', text='Автор')
-            self.tree.heading('Extension', text='Расширение')
+            self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
+            self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
+            self.tree.heading('Author', text='Автор', command=lambda: self.treeview_sort_column(self.tree, 'Author', False))
+            self.tree.heading('Extension', text='Расширение файла', command=lambda: self.treeview_sort_column(self.tree, 'Extension', False))
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
 
@@ -405,11 +472,11 @@ class App:
         try:
             self.tree = ttk.Treeview(self.root, columns=('Rank', 'Favorite', 'Title', 'Author', 'Size', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
-            self.tree.heading('Favorite', text='Избранное')
+            self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
             self.tree.column('Rank', width=30)  # Здесь мы задаём ширину столбца 'Rank'
-            self.tree.heading('Rank', text='Ранг')
-            self.tree.heading('Title', text='Название')
-            self.tree.heading('Author', text='Автор')
+            self.tree.heading('Rank', text='Ранг', command=lambda: self.treeview_sort_column(self.tree, 'Rank', False))
+            self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
+            self.tree.heading('Author', text='Автор', command=lambda: self.treeview_sort_column(self.tree, 'Author', False))
             self.tree.heading('Size', text='Размер')
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=6, sticky="nsew")
@@ -468,11 +535,11 @@ class App:
         try:
             self.tree = ttk.Treeview(self.root, columns=('Rank', 'Favorite', 'Title', 'Author', 'Num Pages', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
-            self.tree.heading('Favorite', text='Избранное')
+            self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
             self.tree.column('Rank', width=50)  # Задаем ширину столбца 'Rank'
-            self.tree.heading('Rank', text='Ранг')
-            self.tree.heading('Title', text='Название')
-            self.tree.heading('Author', text='Автор')
+            self.tree.heading('Rank', text='Ранг', command=lambda: self.treeview_sort_column(self.tree, 'Rank', False))
+            self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
+            self.tree.heading('Author', text='Автор', command=lambda: self.treeview_sort_column(self.tree, 'Author', False))
             self.tree.heading('Num Pages', text='Кол-во страниц')
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=6, sticky="nsew")
@@ -531,11 +598,11 @@ class App:
         try:
             self.tree = ttk.Treeview(self.root, columns=('Rank', 'Favorite', 'Title', 'Author', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
-            self.tree.heading('Favorite', text='Избранное')
+            self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
             self.tree.column('Rank', width=50)  # Задаем ширину столбца 'Rank'
-            self.tree.heading('Rank', text='Ранг')
-            self.tree.heading('Title', text='Название')
-            self.tree.heading('Author', text='Автор')
+            self.tree.heading('Rank', text='Ранг', command=lambda: self.treeview_sort_column(self.tree, 'Rank', False))
+            self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
+            self.tree.heading('Author', text='Автор', command=lambda: self.treeview_sort_column(self.tree, 'Author', False))
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
 
@@ -594,8 +661,8 @@ class App:
         try:
             self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'Num Pages', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
-            self.tree.heading('Favorite', text='Избранное')
-            self.tree.heading('Title', text='Название')
+            self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
+            self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
             self.tree.heading('Num Pages', text='Кол-во страниц')
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
@@ -628,9 +695,9 @@ class App:
         try:
             self.tree = ttk.Treeview(self.root, columns=('Favorite', 'Title', 'File Ext', 'File Size', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
-            self.tree.heading('Favorite', text='Избранное')
-            self.tree.heading('Title', text='Название')
-            self.tree.heading('File Ext', text='Расширение файла')
+            self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
+            self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
+            self.tree.heading('File Ext', text='Расширение файла', command=lambda: self.treeview_sort_column(self.tree, 'File Ext', False))
             self.tree.heading('File Size', text='Размер файла')
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
