@@ -203,7 +203,17 @@ class App:
     # Функция для сортировки столбцов
     def treeview_sort_column(self, tv, col, reverse):
         l = [(tv.set(k, col), k) for k in tv.get_children('')]
-        l.sort(reverse=reverse)
+
+        # Маппинг единиц измерения к их весу в байтах
+        units = {'байт': 1, 'КБ': 1024, 'МБ': 1024**2, 'ГБ': 1024**3, 'ТБ': 1024**4, 'ПБ': 1024**5}
+
+        # Проверяем, являются ли данные числами или строками, и применяем соответствующую функцию сортировки
+        if col == "File Size":
+            l.sort(key=lambda t: float(t[0].split()[0]) * units[t[0].split()[1]], reverse=reverse)
+        elif col == "Num Pages" or col == "Rank":
+            l.sort(key=lambda t: int(t[0]), reverse=reverse)
+        else:
+            l.sort(reverse=reverse)
 
         # Переставляем элементы в отсортированном порядке.
         for index, (val, k) in enumerate(l):
@@ -292,6 +302,35 @@ class App:
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
+    def show_metadata(self, tree):
+        def show_metadata(event):
+            # Получаем выбранный элемент в таблице
+            item = self.tree.selection()[0]
+
+            # Читаем путь файла из последнего столбца
+            file_path = self.tree.item(item, "values")[-1]
+
+            metadata = self.analyzer.get_book_metadata(file_path)
+
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Метаданные книги")
+
+            # Создаем новую таблицу с метаданными
+            metadata_tree = ttk.Treeview(dialog, columns=('Key', 'Value'), show='headings')
+            metadata_tree.heading('Key', text='Ключ')
+            metadata_tree.heading('Value', text='Значение')
+            metadata_tree.grid(row=0, column=0, sticky='nsew')
+
+            # Конфигурируем ряды и столбцы для корректного изменения размера таблицы
+            dialog.grid_rowconfigure(0, weight=1)
+            dialog.grid_columnconfigure(0, weight=1)
+
+            # Вставляем метаданные
+            for key, value in metadata.items():
+                metadata_tree.insert('', 'end', values=(key, value))
+        tree.bind("<Control-m>", show_metadata) # ctrl + m
+
+
     def change_favorite(self, tree):
         def change_favorite(event):
             item = tree.selection()[0]
@@ -361,13 +400,14 @@ class App:
             self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
             self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
             self.tree.heading('Author', text='Автор', command=lambda: self.treeview_sort_column(self.tree, 'Author', False))
-            self.tree.heading('Num Pages', text='Кол-во страниц')
+            self.tree.heading('Num Pages', text='Кол-во страниц', command=lambda: self.treeview_sort_column(self.tree, 'Num Pages', False))
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
             self.change_favorite(self.tree)
+            self.show_metadata(self.tree)
 
             if title is None and self.last_method == self.search_books_by_title:
                 title = self.last_args.get('title')
@@ -399,13 +439,14 @@ class App:
             self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
             self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
             self.tree.heading('Author', text='Автор', command=lambda: self.treeview_sort_column(self.tree, 'Author', False))
-            self.tree.heading('Num Pages', text='Кол-во страниц')
+            self.tree.heading('Num Pages', text='Кол-во страниц', command=lambda: self.treeview_sort_column(self.tree, 'Num Pages', False))
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
             self.change_favorite(self.tree)
+            self.show_metadata(self.tree)
 
             if author is None and self.last_method == self.search_books_by_author:
                 author = self.last_args.get('author')
@@ -444,6 +485,7 @@ class App:
             self.open_file(self.tree)
             self.bind_preview(self.tree)
             self.change_favorite(self.tree)
+            self.show_metadata(self.tree)
 
             if extension is None and self.last_method == self.search_books_by_extension:
                 extension = self.last_args.get('extension')
@@ -470,20 +512,21 @@ class App:
     # Показать книги с наибольшим размером
     def display_largest_books(self, limit=None, offset=None):
         try:
-            self.tree = ttk.Treeview(self.root, columns=('Rank', 'Favorite', 'Title', 'Author', 'Size', 'Path'), show='headings')
+            self.tree = ttk.Treeview(self.root, columns=('Rank', 'Favorite', 'Title', 'Author', 'File Size', 'Path'), show='headings')
             self.tree.column('Favorite', width=30)
             self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
             self.tree.column('Rank', width=30)  # Здесь мы задаём ширину столбца 'Rank'
             self.tree.heading('Rank', text='Ранг', command=lambda: self.treeview_sort_column(self.tree, 'Rank', False))
             self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
             self.tree.heading('Author', text='Автор', command=lambda: self.treeview_sort_column(self.tree, 'Author', False))
-            self.tree.heading('Size', text='Размер')
+            self.tree.heading('File Size', text='Размер файла', command=lambda: self.treeview_sort_column(self.tree, 'File Size', False))
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=6, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
             self.change_favorite2(self.tree)
+            self.show_metadata(self.tree)
 
             if limit is None and offset is None and self.last_method == self.display_largest_books:
                 limit = self.last_args.get('limit')
@@ -540,13 +583,14 @@ class App:
             self.tree.heading('Rank', text='Ранг', command=lambda: self.treeview_sort_column(self.tree, 'Rank', False))
             self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
             self.tree.heading('Author', text='Автор', command=lambda: self.treeview_sort_column(self.tree, 'Author', False))
-            self.tree.heading('Num Pages', text='Кол-во страниц')
+            self.tree.heading('Num Pages', text='Кол-во страниц', command=lambda: self.treeview_sort_column(self.tree, 'Num Pages', False))
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=6, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
             self.change_favorite2(self.tree)
+            self.show_metadata(self.tree)
 
             if limit is None and offset is None and self.last_method == self.display_books_with_most_pages:
                 limit = self.last_args.get('limit')
@@ -609,6 +653,7 @@ class App:
             self.open_file(self.tree)
             self.bind_preview(self.tree)
             self.change_favorite2(self.tree)
+            self.show_metadata(self.tree)
 
             if limit is None and offset is None and self.last_method == self.display_recently_added_books:
                 limit = self.last_args.get('limit')
@@ -663,14 +708,14 @@ class App:
             self.tree.column('Favorite', width=30)
             self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
             self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
-            self.tree.heading('Num Pages', text='Кол-во страниц')
+            self.tree.heading('Num Pages', text='Кол-во страниц', command=lambda: self.treeview_sort_column(self.tree, 'Num Pages', False))
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=4, sticky="nsew")
 
             self.open_file(self.tree)
             self.bind_preview(self.tree)
             self.change_favorite(self.tree)
-
+            self.show_metadata(self.tree)
             
             only_favorites = self.favorites_var.get() == 1
             books = self.analyzer.get_books_without_author(only_favorites)
@@ -698,7 +743,7 @@ class App:
             self.tree.heading('Favorite', text='Избранное', command=lambda: self.treeview_sort_column(self.tree, 'Favorite', False))
             self.tree.heading('Title', text='Название', command=lambda: self.treeview_sort_column(self.tree, 'Title', False))
             self.tree.heading('File Ext', text='Расширение файла', command=lambda: self.treeview_sort_column(self.tree, 'File Ext', False))
-            self.tree.heading('File Size', text='Размер файла')
+            self.tree.heading('File Size', text='Размер файла', command=lambda: self.treeview_sort_column(self.tree, 'File Size', False))
             self.tree.heading('Path', text='Путь к файлу')
             self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
 

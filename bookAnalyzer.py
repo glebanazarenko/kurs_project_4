@@ -424,6 +424,19 @@ class BookAnalyzer:
             print(f"Permission denied for directory: {directory}")
 
     # ЗАПРОСЫ К БД
+
+    def get_book_metadata(self, file_path):
+        cursor = self.open_db()
+        query = f"SELECT metadata FROM books WHERE file_path = '{file_path}'"
+
+        cursor.execute(query)
+        row = cursor.fetchone()
+
+        self.close_db()
+
+        # Возвращаем метаданные, если они найдены, иначе None
+        return eval(row[0]) if row else None
+
     def update_book_favorite_status(self, file_path):
         try:
             cursor = self.open_db()
