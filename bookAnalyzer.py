@@ -1,17 +1,11 @@
 import os
 import io
-import sys
 import argparse
-import json
 import math
 import fitz
-import subprocess
-import tempfile
 import re
 import ebooklib #для работы с ePub-файлами
 from ebooklib import epub
-from bs4 import BeautifulSoup #для обработки HTML-кода в ePub-файлах
-from pathlib import Path
 import sqlite3
 import matplotlib.pyplot as plt
 from typing import List, Tuple
@@ -27,8 +21,6 @@ from odf import meta
 from odf import text
 from odf import teletype
 import aspose.words as aw
-from jinja2 import Environment, FileSystemLoader
-import base64
 
 def yes_no_indicator(value):
     if value == 0:
@@ -677,33 +669,6 @@ class BookAnalyzer:
         plt.title('Number of Pages in Each Book')
         plt.tight_layout()
         plt.show()
-
-    def generate_web_page(self, output_path: str):
-        # Создаем соединение с БД
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-
-        # Получаем все книги из БД
-        cursor.execute('SELECT * FROM books')
-        books = cursor.fetchall()
-
-        # Закрываем соединение
-        conn.close()
-
-        # Конвертируем превью из BLOB в base64 для отображения на веб-странице
-        for book in books:
-            book['preview'] = base64.b64encode(book['preview']).decode('utf-8')
-
-        # Загружаем шаблон из файла
-        env = Environment(loader=FileSystemLoader('.'))
-        template = env.get_template('template.html')
-
-        # Генерируем HTML на основе шаблона и данных книг
-        html = template.render(books=books)
-
-        # Сохраняем HTML в файл
-        with open(output_path, 'w') as file:
-            file.write(html)
 
 def main():
     # Создаем парсер аргументов командной строки
